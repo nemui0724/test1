@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic"; // 生成系はキャッシュ回避
-// export const maxDuration = 60;
 
 type Draft = {
   title: string;
@@ -21,17 +20,17 @@ const FIXED = [
 ] as const;
 
 const BRAND_TAGS: Record<string, string[]> = {
-  "youtube": ["サブスク","動画","Google"],
+  youtube: ["サブスク","動画","Google"],
   "youtube premium": ["サブスク","動画","Google"],
-  "netflix": ["サブスク","動画"],
-  "spotify": ["サブスク","音楽"],
+  netflix: ["サブスク","動画"],
+  spotify: ["サブスク","音楽"],
   "prime video": ["サブスク","動画","Amazon"],
   "apple music": ["サブスク","音楽","Apple"],
-  "icloud": ["サブスク","Apple"],
-  "adobe": ["サブスク","Adobe"],
-  "microsoft": ["サブスク","Microsoft"],
-  "github": ["開発","コード","アカウント"],
-  "google": ["Google"],
+  icloud: ["サブスク","Apple"],
+  adobe: ["サブスク","Adobe"],
+  microsoft: ["サブスク","Microsoft"],
+  github: ["開発","コード","アカウント"],
+  google: ["Google"],
 };
 
 const KEYWORD_TAGS: Array<[RegExp, string[]]> = [
@@ -53,29 +52,34 @@ const GEO_TAGS: Array<[RegExp, string[]]> = [
 ];
 
 const SYN_EXPAND: Record<string, string[]> = {
-  "解約": ["キャンセル","退会","停止"],
-  "請求": ["支払い","料金","明細"],
-  "サブスク": ["定額","月額","定期"],
-  "動画": ["映像","VOD","配信"],
-  "音楽": ["ミュージック","楽曲","ストリーミング"],
-  "購入": ["注文","ショッピング","支出"],
-  "アカウント": ["ログイン","ユーザー","認証"],
-  "旅行": ["観光","トラベル","観光地"],
-  "地名": ["ロケーション","場所"],
-  "重要": ["優先","注目"],
-  "期日": ["締切","デッドライン"],
+  解約: ["キャンセル","退会","停止"],
+  請求: ["支払い","料金","明細"],
+  サブスク: ["定額","月額","定期"],
+  動画: ["映像","VOD","配信"],
+  音楽: ["ミュージック","楽曲","ストリーミング"],
+  購入: ["注文","ショッピング","支出"],
+  アカウント: ["ログイン","ユーザー","認証"],
+  旅行: ["観光","トラベル","観光地"],
+  地名: ["ロケーション","場所"],
+  重要: ["優先","注目"],
+  期日: ["締切","デッドライン"],
 };
 
-// ===== Utils =====
-function isStringArray(x: unknown): x is string[] {
-  return Array.isArray(x) && x.every((v) => typeof v === "string");
-}
-function extractJsonObject(text: string): Record<string, unknown> | null {
+/* ===== Utils ===== */
+const isStringArray = (x: unknown): x is string[] =>
+  Array.isArray(x) && x.every((v) => typeof v === "string");
+
+const extractJsonObject = (text: string): Record<string, unknown> | null => {
   const m = text.match(/\{[\s\S]*\}/);
   if (!m) return null;
-  try { return JSON.parse(m[0]) as Record<string, unknown>; } catch { return null; }
-}
-function addFromUrl(url?: string, into: Set<string>) {
+  try {
+    return JSON.parse(m[0]) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+};
+
+const addFromUrl = (url: string | undefined, into: Set<string>) => {
   if (!url) return;
   try {
     const u = new URL(url);
@@ -86,9 +90,12 @@ function addFromUrl(url?: string, into: Set<string>) {
     for (const k of Object.keys(BRAND_TAGS)) {
       if (host.includes(k)) BRAND_TAGS[k].forEach((t) => into.add(t));
     }
-  } catch { /* ignore */ }
-}
-function addLooseKeywords(base: string, into: Set<string>) {
+  } catch {
+    /* ignore */
+  }
+};
+
+const addLooseKeywords = (base: string, into: Set<string>) => {
   if (/\d{1,2}\/\d{1,2}|\d{4}[-/年]\d{1,2}/.test(base)) into.add("日付");
   if (/\d+円/.test(base)) into.add("金額");
   if (/\b(20\d{2}|19\d{2})\b/.test(base)) into.add("年");
@@ -96,8 +103,14 @@ function addLooseKeywords(base: string, into: Set<string>) {
   kata?.slice(0, 3).forEach((k) => into.add(k));
   const ascii = base.match(/[A-Za-z0-9][A-Za-z0-9\-_.]{1,19}/g);
   ascii?.slice(0, 3).forEach((t) => into.add(t.toLowerCase()));
-}
-function ensureMinTags(seed: string[], ctx: { base: string; url?: string }, min = 6, max = 10): string[] {
+};
+
+const ensureMinTags = (
+  seed: string[],
+  ctx: { base: string; url?: string },
+  min = 6,
+  max = 10
+): string[] => {
   const set = new Set<string>(seed.filter(Boolean));
   for (const [k, tags] of Object.entries(BRAND_TAGS)) {
     if (ctx.base.includes(k)) tags.forEach((t) => set.add(t));
@@ -120,8 +133,9 @@ function ensureMinTags(seed: string[], ctx: { base: string; url?: string }, min 
     if (!set.has(c)) set.add(c);
   }
   return Array.from(set).slice(0, max);
-}
-function heuristic(d: Draft) {
+};
+
+const heuristic = (d: Draft) => {
   const base = `${d.title} ${d.note ?? ""}`.toLowerCase();
   const seeded: string[] = [];
   const final = ensureMinTags(seeded, { base, url: d.url }, 6, 10);
@@ -130,15 +144,42 @@ function heuristic(d: Draft) {
     summary: d.note?.trim() ? d.note.slice(0, 80) : d.title,
     confidence: 0.6,
   };
-}
+};
 
-// ===== Handler =====
+const errorMessage = (x: unknown): string => {
+  if (x instanceof Error) return x.message;
+  if (typeof x === "string") return x;
+  try {
+    return JSON.stringify(x);
+  } catch {
+    return String(x);
+  }
+};
+
+const isDraft = (x: unknown): x is Draft => {
+  if (!x || typeof x !== "object") return false;
+  const o = x as Record<string, unknown>;
+  if (typeof o.title !== "string") return false;
+  if (typeof o.type !== "string") return false;
+  if (o.url !== undefined && typeof o.url !== "string") return false;
+  if (o.username !== undefined && typeof o.username !== "string") return false;
+  if (o.note !== undefined && typeof o.note !== "string") return false;
+  return true;
+};
+
 export async function POST(req: NextRequest) {
   const urlObj = new URL(req.url);
   const trace = urlObj.searchParams.get("trace") === "1";
   const force = urlObj.searchParams.get("force") === "1";
 
-  const draft = (await req.json().catch(() => ({}))) as Draft;
+  const raw = (await req.json().catch(() => ({} as unknown))) as unknown;
+  if (!isDraft(raw)) {
+    return NextResponse.json(
+      { error: "invalid body" },
+      { status: 400, headers: { "Cache-Control": "no-store" } }
+    );
+  }
+  const draft: Draft = raw;
 
   // 入力ガード（短文 & サイズ）
   const titleLen = (draft.title ?? "").trim().length;
@@ -167,7 +208,8 @@ export async function POST(req: NextRequest) {
 
   // キー検証
   const key = process.env.GEMINI_API_KEY;
-  const looksLikeGoogleKey = typeof key === "string" && /^AIza[0-9A-Za-z_\-]{20,}$/.test(key || "");
+  const looksLikeGoogleKey =
+    typeof key === "string" && /^AIza[0-9A-Za-z_\-]{20,}$/.test(key || "");
   if (!key) {
     const h = heuristic(draft);
     return NextResponse.json(
@@ -189,10 +231,12 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    // まず SDK、ダメなら REST にフォールバック（各モデルごとに）
+    // まず SDK、ダメなら REST にフォールバック
     const models = Array.from(
       new Set(
-        [process.env.GEMINI_MODEL, "gemini-1.5-flash", "gemini-2.0-flash"].filter(Boolean) as string[]
+        [process.env.GEMINI_MODEL, "gemini-1.5-flash", "gemini-2.0-flash"].filter(
+          (m): m is string => typeof m === "string" && m.length > 0
+        )
       )
     );
 
@@ -223,7 +267,7 @@ export async function POST(req: NextRequest) {
       // -------- 1) SDK で試す --------
       try {
         const { GoogleGenerativeAI } = await import("@google/generative-ai");
-        const genAI = new GoogleGenerativeAI(key!);
+        const genAI = new GoogleGenerativeAI(key);
         const mdl = genAI.getGenerativeModel({
           model: m,
           generationConfig: { responseMimeType: "application/json" }, // JSON強制
@@ -233,25 +277,30 @@ export async function POST(req: NextRequest) {
         const text = result.response.text() || "{}";
 
         let obj: AIJson | null = null;
-        try { obj = JSON.parse(text) as AIJson; } catch { obj = extractJsonObject(text); }
+        try {
+          obj = JSON.parse(text) as AIJson;
+        } catch {
+          obj = extractJsonObject(text);
+        }
 
-        const aiTags = isStringArray(obj?.tags) ? (obj!.tags as string[]) : [];
+        const aiTags = isStringArray(obj?.tags) ? (obj as AIJson).tags as string[] : [];
         const summary =
-          typeof obj?.summary === "string" && obj!.summary.trim() ? (obj!.summary as string) : draft.title;
+          typeof obj?.summary === "string" && (obj as AIJson).summary?.toString().trim()
+            ? ((obj as AIJson).summary as string)
+            : draft.title;
         const confidence =
-          typeof obj?.confidence === "number" ? (obj!.confidence as number) : 0.7;
+          typeof obj?.confidence === "number" ? ((obj as AIJson).confidence as number) : 0.7;
 
         const base = `${draft.title} ${draft.note ?? ""}`.toLowerCase();
         const merged = ensureMinTags(aiTags, { base, url: draft.url }, 6, 10);
 
-        // AIが空/極端に少ない場合は fallback:true 扱い（UIが弾ける）
         const modelFailed = aiTags.length < 1;
 
         return NextResponse.json(
           { tags: merged, summary, confidence, model: m, fallback: modelFailed, ...(trace ? { raw: text } : {}) },
           { headers: { "Cache-Control": "no-store" } }
         );
-      } catch (e) {
+      } catch (e: unknown) {
         lastErr = e;
         // 続けて REST を試す
       }
@@ -261,7 +310,7 @@ export async function POST(req: NextRequest) {
         const resp = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
             m
-          )}:generateContent?key=${encodeURIComponent(key!)}`,
+          )}:generateContent?key=${encodeURIComponent(key)}`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -277,20 +326,38 @@ export async function POST(req: NextRequest) {
           continue;
         }
 
-        const j = await resp.json();
-        const text =
-          j?.candidates?.[0]?.content?.parts?.[0]?.text ??
-          j?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data ??
+        const j: unknown = await resp.json();
+        const candidates = Array.isArray((j as { candidates?: unknown }).candidates)
+          ? ((j as { candidates: unknown[] }).candidates as unknown[])
+          : [];
+        const content = candidates.length > 0 && typeof candidates[0] === "object"
+          ? ((candidates[0] as { content?: unknown }).content as unknown)
+          : undefined;
+        const parts = content && Array.isArray((content as { parts?: unknown }).parts)
+          ? ((content as { parts: unknown[] }).parts as unknown[])
+          : [];
+
+        const part0 = parts[0] as { text?: unknown; inlineData?: { data?: unknown } } | undefined;
+        const textRaw =
+          (part0?.text as string | undefined) ??
+          (part0?.inlineData?.data as string | undefined) ??
           "{}";
+        const text = typeof textRaw === "string" ? textRaw : "{}";
 
         let obj: AIJson | null = null;
-        try { obj = JSON.parse(text) as AIJson; } catch { obj = extractJsonObject(String(text)); }
+        try {
+          obj = JSON.parse(text) as AIJson;
+        } catch {
+          obj = extractJsonObject(String(text));
+        }
 
-        const aiTags = isStringArray(obj?.tags) ? (obj!.tags as string[]) : [];
+        const aiTags = isStringArray(obj?.tags) ? (obj as AIJson).tags as string[] : [];
         const summary =
-          typeof obj?.summary === "string" && obj!.summary.trim() ? (obj!.summary as string) : draft.title;
+          typeof obj?.summary === "string" && (obj as AIJson).summary?.toString().trim()
+            ? ((obj as AIJson).summary as string)
+            : draft.title;
         const confidence =
-          typeof obj?.confidence === "number" ? (obj!.confidence as number) : 0.7;
+          typeof obj?.confidence === "number" ? ((obj as AIJson).confidence as number) : 0.7;
 
         const base = `${draft.title} ${draft.note ?? ""}`.toLowerCase();
         const merged = ensureMinTags(aiTags, { base, url: draft.url }, 6, 10);
@@ -301,7 +368,7 @@ export async function POST(req: NextRequest) {
           { tags: merged, summary, confidence, model: `rest:${m}`, fallback: modelFailed, ...(trace ? { raw: text } : {}) },
           { headers: { "Cache-Control": "no-store" } }
         );
-      } catch (e) {
+      } catch (e: unknown) {
         lastErr = e;
         continue; // 次のモデルへ
       }
@@ -310,16 +377,15 @@ export async function POST(req: NextRequest) {
     // すべて失敗 → 200 + 保険
     const h = heuristic(draft);
     return NextResponse.json(
-      { ...h, model: "heuristic:fallback", fallback: true, error: String((lastErr as any)?.message ?? lastErr) },
+      { ...h, model: "heuristic:fallback", fallback: true, error: errorMessage(lastErr) },
       { headers: { "Cache-Control": "no-store" } }
     );
-  } catch (e) {
+  } catch (e: unknown) {
     // 想定外でも 200 + 保険（UI は fallback を検知して保存中断できる）
     const h = heuristic(draft);
     return NextResponse.json(
-      { ...h, model: "heuristic:error", fallback: true, error: String((e as any)?.message ?? e) },
+      { ...h, model: "heuristic:error", fallback: true, error: errorMessage(e) },
       { headers: { "Cache-Control": "no-store" } }
     );
   }
 }
-

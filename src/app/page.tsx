@@ -1,3 +1,4 @@
+// src/app/page.tsx
 "use client";
 
 import React, { useMemo, useState, useEffect } from "react";
@@ -33,6 +34,7 @@ import {
   Alert,
 } from "@mui/material";
 import { ThemeProvider, alpha, createTheme, styled } from "@mui/material/styles";
+import type { SelectChangeEvent } from "@mui/material/Select";
 
 // Firestore
 import { db } from "../lib/firebase";
@@ -45,6 +47,7 @@ import {
   query,
   orderBy,
   serverTimestamp,
+  Timestamp,
 } from "firebase/firestore";
 
 // ★ AIタグヘルパー（あなたのファイル: src/app/api/aiTag.ts）
@@ -151,6 +154,16 @@ const TypeChip: React.FC<{ type: ItemType }> = ({ type }) => (
   />
 );
 
+// Timestamp/number/未定義を安全にエポックミリ秒へ
+const toEpochMillis = (v: unknown): number => {
+  if (typeof v === "number") return v;
+  if (v instanceof Timestamp) return v.toMillis();
+  if (v && typeof (v as { toMillis?: () => number }).toMillis === "function") {
+    return (v as { toMillis: () => number }).toMillis();
+  }
+  return Date.now();
+};
+
 /* ===== Add Dialog ===== */
 function AddItemDialog({
   open,
@@ -202,7 +215,9 @@ function AddItemDialog({
               labelId="type-label"
               label="種類"
               value={type}
-              onChange={(e) => setType(e.target.value as ItemType)}
+              onChange={(e: SelectChangeEvent) =>
+                setType(e.target.value as ItemType)
+              }
             >
               <MenuItem value="account">🔐 アカウント</MenuItem>
               <MenuItem value="todo">✅ ToDo</MenuItem>
@@ -511,22 +526,24 @@ export default function Page() {
       const q = query(collection(db, "items"), orderBy("createdAt", "desc"));
       const unsub = onSnapshot(q, (snap) => {
         const arr: Item[] = snap.docs.map((d) => {
-          const data = d.data() as any;
-          const created =
-            data.createdAt?.toMillis?.() ??
-            (typeof data.createdAt === "number" ? data.createdAt : Date.now());
+          const data = d.data() as Record<string, unknown>;
+          const created = toEpochMillis(data.createdAt);
+
           return {
             id: d.id,
-            title: data.title ?? "",
-            type: data.type ?? "memo",
-            url: data.url ?? null,
-            username: data.username ?? null,
-            note: data.note ?? null,
-            tags: Array.isArray(data.tags) ? data.tags : [],
+            title: (data.title as string) ?? "",
+            type: ((data.type as ItemType) ?? "memo") as ItemType,
+            url: ((data.url as string) ?? null) as string | null,
+            username: ((data.username as string) ?? null) as string | null,
+            note: ((data.note as string) ?? null) as string | null,
+            tags: Array.isArray(data.tags) ? (data.tags as string[]) : [],
             createdAt: created,
-            aiSummary: data.aiSummary ?? null,
-            aiConfidence: data.aiConfidence ?? null,
-            aiModel: data.aiModel ?? null,
+            aiSummary: ((data.aiSummary as string) ?? null) as string | null,
+            aiConfidence:
+              typeof data.aiConfidence === "number"
+                ? (data.aiConfidence as number)
+                : null,
+            aiModel: ((data.aiModel as string) ?? null) as string | null,
           };
         });
         setItems(arr);
@@ -589,7 +606,7 @@ export default function Page() {
           username: draft.username,
           note: draft.note,
         } as AiDraft,
-        { allowFallback: false } // ← ヒューリスティックは不採用
+        { allowFallback: false }
       );
 
       const tags = Array.isArray(data.tags) ? data.tags : [];
@@ -605,18 +622,20 @@ export default function Page() {
         username: draft.username ?? null,
         note: draft.note ?? null,
         tags: tags.slice(0, 12),
-        aiSummary: data.summary ?? null,
+        aiSummary: (data as { summary?: string }).summary ?? null,
         aiConfidence:
-          typeof data.confidence === "number" ? data.confidence : null,
-        aiModel: data.model ?? null, // 実際のモデル名を記録
+          typeof (data as { confidence?: unknown }).confidence === "number"
+            ? ((data as { confidence: number }).confidence as number)
+            : null,
+        aiModel: (data as { model?: string }).model ?? null,
         createdAt: serverTimestamp(),
         lastTaggedAt: serverTimestamp(),
       });
-
-      // 追加完了後、ダイアログを閉じるなどは AddItemDialog 側で既にやっている
-    } catch (e: any) {
+    } catch (e: unknown) {
       setErrorMsg(
-        e?.message || "AIタグ生成に失敗しました。時間をおいて再試行してください。"
+        e instanceof Error
+          ? e.message
+          : "AIタグ生成に失敗しました。時間をおいて再試行してください。"
       );
     }
   };
@@ -670,7 +689,9 @@ export default function Page() {
             <Select
               label="種類"
               value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value as any)}
+              onChange={(e: SelectChangeEvent) =>
+                setTypeFilter(e.target.value as "all" | ItemType)
+              }
             >
               <MenuItem value="all">すべて</MenuItem>
               <MenuItem value="account">アカウント</MenuItem>
@@ -684,7 +705,9 @@ export default function Page() {
             <Select
               label="並び替え"
               value={sortKey}
-              onChange={(e) => setSortKey(e.target.value as any)}
+              onChange={(e: SelectChangeEvent) =>
+                setSortKey(e.target.value as "recent" | "title")
+              }
             >
               <MenuItem value="recent">新着順</MenuItem>
               <MenuItem value="title">タイトル順</MenuItem>
