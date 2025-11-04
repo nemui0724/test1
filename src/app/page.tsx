@@ -42,6 +42,7 @@ import {
   collection,
   addDoc,
   deleteDoc,
+  updateDoc, // ★ 追加
   doc,
   onSnapshot,
   query,
@@ -77,6 +78,7 @@ interface Item {
   note?: string | null;
   tags: string[];
   createdAt: number; // epoch millis
+  updatedAt?: number | null;
   aiSummary?: string | null;
   aiConfidence?: number | null;
   aiModel?: string | null;
@@ -290,26 +292,187 @@ function AddItemDialog({
   );
 }
 
+/* ===== Edit Dialog ===== */
+function EditItemDialog({
+  item,
+  open,
+  onClose,
+  onSave,
+}: {
+  item: Item | null;
+  open: boolean;
+  onClose: () => void;
+  onSave: (
+    id: string,
+    patch: {
+      title: string;
+      type: ItemType;
+      url?: string;
+      username?: string;
+      note?: string;
+    }
+  ) => void;
+}) {
+  const [type, setType] = useState<ItemType>(item?.type ?? "account");
+  const [title, setTitle] = useState(item?.title ?? "");
+  const [url, setUrl] = useState(item?.url ?? "");
+  const [username, setUsername] = useState(item?.username ?? "");
+  const [note, setNote] = useState(item?.note ?? "");
+
+  useEffect(() => {
+    setType(item?.type ?? "account");
+    setTitle(item?.title ?? "");
+    setUrl(item?.url ?? "");
+    setUsername(item?.username ?? "");
+    setNote(item?.note ?? "");
+  }, [item, open]);
+
+  const canSave = !!item && title.trim().length > 0;
+
+  const handleSave = () => {
+    if (!item) return;
+    onSave(item.id, {
+      title: title.trim(),
+      type,
+      url: url || undefined,
+      username: username || undefined,
+      note: note || undefined,
+    });
+    onClose();
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
+      <DialogTitle>項目を編集</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} sx={{ mt: 1 }}>
+          <FormControl fullWidth>
+            <InputLabel id="edit-type-label">種類</InputLabel>
+            <Select
+              labelId="edit-type-label"
+              label="種類"
+              value={type}
+              onChange={(e: SelectChangeEvent) =>
+                setType(e.target.value as ItemType)
+              }
+            >
+              <MenuItem value="account">🔐 アカウント</MenuItem>
+              <MenuItem value="todo">✅ ToDo</MenuItem>
+              <MenuItem value="subscription">💳 サブスク</MenuItem>
+              <MenuItem value="memo">📝 メモ</MenuItem>
+            </Select>
+          </FormControl>
+
+          <TextField
+            label="タイトル"
+            fullWidth
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+          />
+
+          {type !== "memo" && (
+            <TextField
+              label={
+                type === "account"
+                  ? "ユーザー名 / メール"
+                  : type === "subscription"
+                  ? "プラン名"
+                  : "担当者"
+              }
+              fullWidth
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+            />
+          )}
+
+          <TextField
+            label="URL (任意)"
+            fullWidth
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">🔗</InputAdornment>
+              ),
+            }}
+          />
+
+          <TextField
+            label="メモ"
+            fullWidth
+            multiline
+            minRows={3}
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">📝</InputAdornment>
+              ),
+            }}
+          />
+
+          <Typography variant="body2" sx={{ opacity: 0.7 }}>
+            保存時に AI が再度タグ付けします。
+          </Typography>
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>キャンセル</Button>
+        <Button variant="contained" onClick={handleSave} disabled={!canSave}>
+          保存
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
 /* ===== 詳細モーダル ===== */
 function ItemDetailDialog({
   item,
   open,
   onClose,
+  onEdit, // ★ 追加
 }: {
   item: Item | null;
   open: boolean;
   onClose: () => void;
+  onEdit: (item: Item) => void;
 }) {
   if (!item) return null;
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle>{item.title}</DialogTitle>
+      <DialogTitle>
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 1,
+          }}
+        >
+          <span>{item.title}</span>
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={() => onEdit(item)}
+          >
+            ✏️ 編集
+          </Button>
+        </Box>
+      </DialogTitle>
       <DialogContent dividers>
         <Stack spacing={1.2}>
           <Typography variant="body2">
             種類: <b>{item.type}</b>
           </Typography>
-          <Typography variant="body2">作成: {formatJST(item.createdAt)}</Typography>
+          <Typography variant="body2">
+            作成: {formatJST(item.createdAt)}
+          </Typography>
+          {item.updatedAt ? (
+            <Typography variant="body2">
+              更新: {formatJST(item.updatedAt)}
+            </Typography>
+          ) : null}
           {item.username && (
             <Typography variant="body2">識別子: {item.username}</Typography>
           )}
@@ -357,10 +520,12 @@ function ItemCard({
   item,
   onDelete,
   onOpen,
+  onEdit, // ★ 追加
 }: {
   item: Item;
   onDelete: (id: string) => void;
   onOpen: (item: Item) => void;
+  onEdit: (item: Item) => void;
 }) {
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => setMounted(true), []);
@@ -498,7 +663,9 @@ function ItemCard({
         </Stack>
       </CardContent>
 
-      <CardActions sx={{ pt: 0 }}>
+      <CardActions
+        sx={{ pt: 0, display: "flex", justifyContent: "space-between" }}
+      >
         <Button
           size="small"
           color="inherit"
@@ -508,6 +675,15 @@ function ItemCard({
           }}
         >
           削除
+        </Button>
+        <Button
+          size="small"
+          onClick={(e) => {
+            e.stopPropagation();
+            onEdit(item);
+          }}
+        >
+          ✏️ 編集
         </Button>
       </CardActions>
     </Card>
@@ -528,6 +704,8 @@ export default function Page() {
         const arr: Item[] = snap.docs.map((d) => {
           const data = d.data() as Record<string, unknown>;
           const created = toEpochMillis(data.createdAt);
+          const updated =
+            data.updatedAt !== undefined ? toEpochMillis(data.updatedAt) : null;
 
           return {
             id: d.id,
@@ -538,6 +716,7 @@ export default function Page() {
             note: ((data.note as string) ?? null) as string | null,
             tags: Array.isArray(data.tags) ? (data.tags as string[]) : [],
             createdAt: created,
+            updatedAt: updated,
             aiSummary: ((data.aiSummary as string) ?? null) as string | null,
             aiConfidence:
               typeof data.aiConfidence === "number"
@@ -561,6 +740,7 @@ export default function Page() {
   const [addOpen, setAddOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [detailItem, setDetailItem] = useState<Item | null>(null);
+  const [editItem, setEditItem] = useState<Item | null>(null); // ★ 追加
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
@@ -589,7 +769,6 @@ export default function Page() {
   }) => {
     setErrorMsg(null);
 
-    // 短文ガード
     const contentLen =
       (draft.title?.trim().length || 0) + (draft.note?.trim().length || 0);
     if (contentLen < 3) {
@@ -611,7 +790,9 @@ export default function Page() {
 
       const tags = Array.isArray(data.tags) ? data.tags : [];
       if (!tags.length) {
-        setErrorMsg("AIタグが生成されませんでした。内容を少し詳しくして再試行してください。");
+        setErrorMsg(
+          "AIタグが生成されませんでした。内容を少し詳しくして再試行してください。"
+        );
         return; // 未分類で保存しない
       }
 
@@ -636,6 +817,71 @@ export default function Page() {
         e instanceof Error
           ? e.message
           : "AIタグ生成に失敗しました。時間をおいて再試行してください。"
+      );
+    }
+  };
+
+  // ★ 更新：AIで再タグ付けしてから updateDoc
+  const updateExistingItem = async (
+    id: string,
+    patch: {
+      title: string;
+      type: ItemType;
+      url?: string;
+      username?: string;
+      note?: string;
+    }
+  ) => {
+    setErrorMsg(null);
+
+    const contentLen =
+      (patch.title?.trim().length || 0) + (patch.note?.trim().length || 0);
+    if (contentLen < 3) {
+      setErrorMsg("タイトル/メモが短すぎます（3文字以上にしてください）");
+      return;
+    }
+
+    try {
+      const data = await aiTag(
+        {
+          title: patch.title,
+          type: patch.type,
+          url: patch.url,
+          username: patch.username,
+          note: patch.note,
+        } as AiDraft,
+        { allowFallback: false }
+      );
+
+      const tags = Array.isArray(data.tags) ? data.tags : [];
+      if (!tags.length) {
+        setErrorMsg(
+          "AIタグが生成されませんでした。内容を少し詳しくして再試行してください。"
+        );
+        return;
+      }
+
+      await updateDoc(doc(db, "items", id), {
+        title: patch.title,
+        type: patch.type,
+        url: patch.url ?? null,
+        username: patch.username ?? null,
+        note: patch.note ?? null,
+        tags: tags.slice(0, 12),
+        aiSummary: (data as { summary?: string }).summary ?? null,
+        aiConfidence:
+          typeof (data as { confidence?: unknown }).confidence === "number"
+            ? ((data as { confidence: number }).confidence as number)
+            : null,
+        aiModel: (data as { model?: string }).model ?? null,
+        lastTaggedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    } catch (e: unknown) {
+      setErrorMsg(
+        e instanceof Error
+          ? e.message
+          : "更新に失敗しました。時間をおいて再試行してください。"
       );
     }
   };
@@ -740,6 +986,7 @@ export default function Page() {
                 item={it}
                 onDelete={deleteItem}
                 onOpen={(item) => setDetailItem(item)}
+                onEdit={(item) => setEditItem(item)} // ★ 追加
               />
             </Box>
           ))}
@@ -773,7 +1020,11 @@ export default function Page() {
       >
         <DialogTitle>設定</DialogTitle>
         <DialogContent>
-          <Stack direction="row" alignItems="center" justifyContent="space-between">
+          <Stack
+            direction="row"
+            alignItems="center"
+            justifyContent="space-between"
+          >
             <Typography>ダークモード</Typography>
             <Switch checked={dark} onChange={() => setDark(!dark)} />
           </Stack>
@@ -783,11 +1034,23 @@ export default function Page() {
         </DialogActions>
       </Dialog>
 
-      {/* 詳細モーダル */}
+      {/* 詳細モーダル（右上に編集ボタン追加済み） */}
       <ItemDetailDialog
         item={detailItem}
         open={!!detailItem}
         onClose={() => setDetailItem(null)}
+        onEdit={(item) => {
+          setDetailItem(null);
+          setEditItem(item);
+        }}
+      />
+
+      {/* 編集ダイアログ */}
+      <EditItemDialog
+        item={editItem}
+        open={!!editItem}
+        onClose={() => setEditItem(null)}
+        onSave={(id, patch) => updateExistingItem(id, patch)}
       />
     </ThemeProvider>
   );
