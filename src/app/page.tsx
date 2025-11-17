@@ -799,7 +799,7 @@ export default function Page() {
     items: itemsForSearch,
     search: queryText, // 入力そのまま（カタカナ/ひらがな/漢字どれでもOK）
     keys: FUSE_KEYS,
-    threshold: 0.3,
+    threshold: 0.5,
   });
 
   // 種類フィルタ & ソート
