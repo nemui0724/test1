@@ -42,7 +42,7 @@ import {
   collection,
   addDoc,
   deleteDoc,
-  updateDoc, // ★ 追加
+  updateDoc,
   doc,
   onSnapshot,
   query,
@@ -51,8 +51,14 @@ import {
   Timestamp,
 } from "firebase/firestore";
 
-// ★ AIタグヘルパー（あなたのファイル: src/app/api/aiTag.ts）
+// AIタグヘルパー
 import { aiTag, Draft as AiDraft } from "./api/aiTag";
+
+// Fuse.js hook
+import { useFuseSearch } from "../hooks/useFuseSearch";
+
+// ひらがな変換ライブラリ
+import { toHiragana } from "wanakana";
 
 /* ---- JST固定フォーマッタ（SSR/CSRで同一出力） ---- */
 const formatJST = (ts: number) =>
@@ -84,6 +90,17 @@ interface Item {
   aiModel?: string | null;
 }
 
+/**
+ * Fuse検索用に「元の文字列 + ひらがな化した文字列」を持たせた型
+ * 例：タイトル「アカウント」 → "アカウント あかうんと"
+ */
+type SearchItem = Item & {
+  titleSearch: string;
+  usernameSearch: string;
+  noteSearch: string;
+  tagsSearch: string;
+};
+
 /* ===== Theme ===== */
 const useAppTheme = (mode: "light" | "dark") =>
   useMemo(
@@ -113,6 +130,17 @@ const NOTE_LINES = 3;
 const TAG_ROWS_MAX = 2;
 const CHIP_HEIGHT = 28;
 const CHIP_ROW_GAP = 6;
+
+/* ===== Fuse.js 用の対象キー =====
+ * 元の値 + ひらがなをくっつけた field を検索対象にする
+ */
+const FUSE_KEYS: string[] = [
+  "titleSearch",
+  "usernameSearch",
+  "noteSearch",
+  "tagsSearch",
+  "url",
+];
 
 /* ===== Utilities ===== */
 const typeMeta: Record<
@@ -165,6 +193,10 @@ const toEpochMillis = (v: unknown): number => {
   }
   return Date.now();
 };
+
+// ひらがな正規化（null/undefinedにも安全）
+const normalizeKana = (input: string | null | undefined): string =>
+  input ? toHiragana(input) : "";
 
 /* ===== Add Dialog ===== */
 function AddItemDialog({
@@ -278,7 +310,7 @@ function AddItemDialog({
           />
 
           <Typography variant="body2" sx={{ opacity: 0.7 }}>
-            保存すると AI が自動でタグ付けします（短文だと精度が落ちます）。
+            保存すると AI が自動でタグ付けします。
           </Typography>
         </Stack>
       </DialogContent>
@@ -431,7 +463,7 @@ function ItemDetailDialog({
   item,
   open,
   onClose,
-  onEdit, // ★ 追加
+  onEdit,
 }: {
   item: Item | null;
   open: boolean;
@@ -520,7 +552,7 @@ function ItemCard({
   item,
   onDelete,
   onOpen,
-  onEdit, // ★ 追加
+  onEdit,
 }: {
   item: Item;
   onDelete: (id: string) => void;
@@ -740,26 +772,54 @@ export default function Page() {
   const [addOpen, setAddOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [detailItem, setDetailItem] = useState<Item | null>(null);
-  const [editItem, setEditItem] = useState<Item | null>(null); // ★ 追加
+  const [editItem, setEditItem] = useState<Item | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const filtered = useMemo(() => {
-    const q = queryText.trim().toLowerCase();
-    let arr = items.filter((it) =>
-      [it.title, it.username, it.url, it.note, it.tags.join(" ")]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-        .includes(q)
-    );
-    if (typeFilter !== "all") arr = arr.filter((it) => it.type === typeFilter);
-    if (sortKey === "title")
-      arr = [...arr].sort((a, b) => a.title.localeCompare(b.title));
-    else arr = [...arr].sort((a, b) => b.createdAt - a.createdAt);
-    return arr;
-  }, [items, queryText, typeFilter, sortKey]);
+  // Fuse用に「元文字列 + ひらがな」を仕込んだ配列を作る
+  const itemsForSearch = useMemo<SearchItem[]>(() => {
+    return items.map((it) => {
+      const titleKana = normalizeKana(it.title);
+      const usernameKana = normalizeKana(it.username ?? "");
+      const noteKana = normalizeKana(it.note ?? "");
+      const tagsJoined = it.tags.join(" ");
+      const tagsKana = normalizeKana(tagsJoined);
 
-  // 追加保存：AIでタグ付け（失敗/保険時は保存しない）
+      return {
+        ...it,
+        titleSearch: `${it.title} ${titleKana}`.trim(),
+        usernameSearch: `${it.username ?? ""} ${usernameKana}`.trim(),
+        noteSearch: `${it.note ?? ""} ${noteKana}`.trim(),
+        tagsSearch: `${tagsJoined} ${tagsKana}`.trim(),
+      };
+    });
+  }, [items]);
+
+  // Fuse.js であいまい検索
+  const searched = useFuseSearch<SearchItem>({
+    items: itemsForSearch,
+    search: queryText, // 入力そのまま（カタカナ/ひらがな/漢字どれでもOK）
+    keys: FUSE_KEYS,
+    threshold: 0.3,
+  });
+
+  // 種類フィルタ & ソート
+  const filtered = useMemo(() => {
+    let arr = searched;
+
+    if (typeFilter !== "all") {
+      arr = arr.filter((it) => it.type === typeFilter);
+    }
+
+    if (sortKey === "title") {
+      arr = [...arr].sort((a, b) => a.title.localeCompare(b.title));
+    } else {
+      arr = [...arr].sort((a, b) => b.createdAt - a.createdAt);
+    }
+
+    return arr;
+  }, [searched, typeFilter, sortKey]);
+
+  // 追加保存：AIでタグ付け
   const saveNewItem = async (draft: {
     title: string;
     type: ItemType;
@@ -821,7 +881,7 @@ export default function Page() {
     }
   };
 
-  // ★ 更新：AIで再タグ付けしてから updateDoc
+  // 更新：AIで再タグ付けしてから updateDoc
   const updateExistingItem = async (
     id: string,
     patch: {
@@ -894,7 +954,7 @@ export default function Page() {
     <ThemeProvider theme={theme}>
       <CssBaseline />
 
-      {/* エラー表示（AppBarの下に固定） */}
+      {/* エラー表示 */}
       {errorMsg && (
         <Alert
           severity="error"
@@ -924,7 +984,10 @@ export default function Page() {
               sx={{ width: 560, maxWidth: "60vw" }}
             />
           </Box>
-          <IconButton onClick={() => setSettingsOpen(true)} aria-label="設定を開く">
+          <IconButton
+            onClick={() => setSettingsOpen(true)}
+            aria-label="設定を開く"
+          >
             ⚙️
           </IconButton>
         </Toolbar>
@@ -986,7 +1049,7 @@ export default function Page() {
                 item={it}
                 onDelete={deleteItem}
                 onOpen={(item) => setDetailItem(item)}
-                onEdit={(item) => setEditItem(item)} // ★ 追加
+                onEdit={(item) => setEditItem(item)}
               />
             </Box>
           ))}
@@ -1055,3 +1118,4 @@ export default function Page() {
     </ThemeProvider>
   );
 }
+
