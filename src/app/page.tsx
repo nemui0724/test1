@@ -275,7 +275,7 @@ function AddItemDialog({
                   ? "ユーザー名 / メール"
                   : type === "subscription"
                   ? "プラン名"
-                  : "担当者"
+                  : "担当"
               }
               fullWidth
               value={username}
@@ -800,6 +800,7 @@ export default function Page() {
     search: queryText, // 入力そのまま（カタカナ/ひらがな/漢字どれでもOK）
     keys: FUSE_KEYS,
     threshold: 0.5,
+    distance: 100,
   });
 
   // 種類フィルタ & ソート
@@ -969,7 +970,7 @@ export default function Page() {
       <AppBar position="sticky" elevation={4}>
         <Toolbar sx={{ gap: 2 }}>
           <Typography variant="h6" fontWeight={900}>
-            卒研
+            卒研タイトル考えるサイト
           </Typography>
           <Box sx={{ flex: 1, display: "flex", justifyContent: "center" }}>
             <TextField

@@ -6,14 +6,16 @@ type UseFuseSearchParams<T> = {
   items: T[];
   search: string;
   keys: string[];     // 検索対象にするフィールド名
-  threshold?: number; // あいまい度（0〜1, デフォルト0.3）
+  threshold?: number; // あいまい度（0〜1）
+  distance?: number;  // どれくらい離れた位置まで許容するか
 };
 
 export function useFuseSearch<T>({
   items,
   search,
   keys,
-  threshold = 0.3,
+  threshold = 0.5,
+  distance = 100,  // ← タイプミスに少し強くする
 }: UseFuseSearchParams<T>): T[] {
   const fuse = useMemo(() => {
     if (!items.length) return null;
@@ -21,8 +23,9 @@ export function useFuseSearch<T>({
       keys,
       threshold,
       ignoreLocation: true,
+      distance,
     });
-  }, [items, keys, threshold]);
+  }, [items, keys, threshold, distance]);
 
   const results = useMemo(() => {
     const q = search.trim();
@@ -33,4 +36,5 @@ export function useFuseSearch<T>({
 
   return results;
 }
+
 
