@@ -970,7 +970,7 @@ export default function Page() {
       <AppBar position="sticky" elevation={4}>
         <Toolbar sx={{ gap: 2 }}>
           <Typography variant="h6" fontWeight={900}>
-            卒研タイトル考えるサイト
+            卒研
           </Typography>
           <Box sx={{ flex: 1, display: "flex", justifyContent: "center" }}>
             <TextField
