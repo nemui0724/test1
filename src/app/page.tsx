@@ -1,7 +1,7 @@
 // src/app/page.tsx
 "use client";
 
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useRef } from "react";
 import {
   AppBar,
   Avatar,
@@ -32,6 +32,8 @@ import {
   Toolbar,
   Typography,
   Alert,
+  Collapse,
+  useMediaQuery,
 } from "@mui/material";
 import { ThemeProvider, alpha, createTheme, styled } from "@mui/material/styles";
 import type { SelectChangeEvent } from "@mui/material/Select";
@@ -497,13 +499,9 @@ function ItemDetailDialog({
           <Typography variant="body2">
             種類: <b>{item.type}</b>
           </Typography>
-          <Typography variant="body2">
-            作成: {formatJST(item.createdAt)}
-          </Typography>
+          <Typography variant="body2">作成: {formatJST(item.createdAt)}</Typography>
           {item.updatedAt ? (
-            <Typography variant="body2">
-              更新: {formatJST(item.updatedAt)}
-            </Typography>
+            <Typography variant="body2">更新: {formatJST(item.updatedAt)}</Typography>
           ) : null}
           {item.username && (
             <Typography variant="body2">識別子: {item.username}</Typography>
@@ -727,6 +725,49 @@ export default function Page() {
   const [dark, setDark] = useState(true);
   const theme = useAppTheme(dark ? "dark" : "light");
 
+  // ★ スマホだけ：下スクロールでヘッダーを縮め、上スクロールで戻す
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const [compactHeader, setCompactHeader] = useState(false);
+  const lastYRef = useRef(0);
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!isMobile) {
+      setCompactHeader(false);
+      return;
+    }
+
+    lastYRef.current = window.scrollY || 0;
+
+    const MIN_Y_TO_COMPACT = 80; // ここより下で縮む
+    const DELTA = 12; // 小さな揺れは無視
+    let ticking = false;
+
+    const onScroll = () => {
+      const y = window.scrollY || 0;
+      if (ticking) return;
+      ticking = true;
+
+      window.requestAnimationFrame(() => {
+        const dy = y - lastYRef.current;
+
+        if (y < 24) {
+          setCompactHeader(false);
+        } else if (dy > DELTA && y > MIN_Y_TO_COMPACT) {
+          setCompactHeader(true);
+        } else if (dy < -DELTA) {
+          setCompactHeader(false);
+        }
+
+        lastYRef.current = y;
+        ticking = false;
+      });
+    };
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [isMobile]);
+
   // Firestore 購読
   const [items, setItems] = useState<Item[]>([]);
   useEffect(() => {
@@ -797,7 +838,7 @@ export default function Page() {
   // Fuse.js であいまい検索
   const searched = useFuseSearch<SearchItem>({
     items: itemsForSearch,
-    search: queryText, // 入力そのまま（カタカナ/ひらがな/漢字どれでもOK）
+    search: queryText,
     keys: FUSE_KEYS,
     threshold: 0.5,
     distance: 100,
@@ -854,7 +895,7 @@ export default function Page() {
         setErrorMsg(
           "AIタグが生成されませんでした。内容を少し詳しくして再試行してください。"
         );
-        return; // 未分類で保存しない
+        return;
       }
 
       await addDoc(collection(db, "items"), {
@@ -966,25 +1007,55 @@ export default function Page() {
         </Alert>
       )}
 
-      {/* ヘッダー */}
+      {/* ヘッダー（スマホだけ縮む） */}
       <AppBar position="sticky" elevation={4}>
-        <Toolbar sx={{ gap: 2 }}>
-          <Typography variant="h6" fontWeight={900}>
-            卒研
+        {/* 1段目 */}
+        <Toolbar
+          sx={{
+            gap: 2,
+            transition: "all .2s",
+            minHeight: isMobile && compactHeader ? 48 : undefined,
+            px: isMobile && compactHeader ? 1 : 2,
+          }}
+        >
+          <Typography
+            variant={isMobile && compactHeader ? "subtitle1" : "h6"}
+            fontWeight={900}
+            sx={{ whiteSpace: "nowrap" }}
+          >
+            卒研タイトル考えるサイト
           </Typography>
+
           <Box sx={{ flex: 1, display: "flex", justifyContent: "center" }}>
-            <TextField
-              placeholder="検索 (タイトル・タグ・URL)"
-              value={queryText}
-              onChange={(e) => setQueryText(e.target.value)}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">🔎</InputAdornment>
-                ),
-              }}
-              sx={{ width: 560, maxWidth: "60vw" }}
-            />
+            {isMobile && compactHeader ? (
+              <IconButton
+                aria-label="検索を表示"
+                onClick={() => {
+                  setCompactHeader(false);
+                  setTimeout(() => searchRef.current?.focus(), 0);
+                }}
+              >
+                🔎
+              </IconButton>
+            ) : (
+              <TextField
+                inputRef={searchRef}
+                placeholder="検索 (タイトル・タグ・URL)"
+                value={queryText}
+                onChange={(e) => setQueryText(e.target.value)}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">🔎</InputAdornment>
+                  ),
+                }}
+                sx={{
+                  width: { xs: "100%", sm: 560 },
+                  maxWidth: { xs: "100%", sm: "60vw" },
+                }}
+              />
+            )}
           </Box>
+
           <IconButton
             onClick={() => setSettingsOpen(true)}
             aria-label="設定を開く"
@@ -993,40 +1064,45 @@ export default function Page() {
           </IconButton>
         </Toolbar>
 
-        <Toolbar sx={{ justifyContent: "center", gap: 2, pt: 0 }}>
-          <FormControl size="small" sx={{ minWidth: 140 }}>
-            <InputLabel>種類</InputLabel>
-            <Select
-              label="種類"
-              value={typeFilter}
-              onChange={(e: SelectChangeEvent) =>
-                setTypeFilter(e.target.value as "all" | ItemType)
-              }
-            >
-              <MenuItem value="all">すべて</MenuItem>
-              <MenuItem value="account">アカウント</MenuItem>
-              <MenuItem value="todo">ToDo</MenuItem>
-              <MenuItem value="subscription">サブスク</MenuItem>
-              <MenuItem value="memo">メモ</MenuItem>
-            </Select>
-          </FormControl>
-          <FormControl size="small" sx={{ minWidth: 140 }}>
-            <InputLabel>並び替え</InputLabel>
-            <Select
-              label="並び替え"
-              value={sortKey}
-              onChange={(e: SelectChangeEvent) =>
-                setSortKey(e.target.value as "recent" | "title")
-              }
-            >
-              <MenuItem value="recent">新着順</MenuItem>
-              <MenuItem value="title">タイトル順</MenuItem>
-            </Select>
-          </FormControl>
-          <Button variant="outlined" onClick={() => setAddOpen(true)}>
-            ＋ 追加
-          </Button>
-        </Toolbar>
+        {/* 2段目（スマホで縮んだら畳む） */}
+        <Collapse in={!isMobile || !compactHeader} timeout={180} unmountOnExit>
+          <Toolbar sx={{ justifyContent: "center", gap: 2, pt: 0 }}>
+            <FormControl size="small" sx={{ minWidth: 140 }}>
+              <InputLabel>種類</InputLabel>
+              <Select
+                label="種類"
+                value={typeFilter}
+                onChange={(e: SelectChangeEvent) =>
+                  setTypeFilter(e.target.value as "all" | ItemType)
+                }
+              >
+                <MenuItem value="all">すべて</MenuItem>
+                <MenuItem value="account">アカウント</MenuItem>
+                <MenuItem value="todo">ToDo</MenuItem>
+                <MenuItem value="subscription">サブスク</MenuItem>
+                <MenuItem value="memo">メモ</MenuItem>
+              </Select>
+            </FormControl>
+
+            <FormControl size="small" sx={{ minWidth: 140 }}>
+              <InputLabel>並び替え</InputLabel>
+              <Select
+                label="並び替え"
+                value={sortKey}
+                onChange={(e: SelectChangeEvent) =>
+                  setSortKey(e.target.value as "recent" | "title")
+                }
+              >
+                <MenuItem value="recent">新着順</MenuItem>
+                <MenuItem value="title">タイトル順</MenuItem>
+              </Select>
+            </FormControl>
+
+            <Button variant="outlined" onClick={() => setAddOpen(true)}>
+              ＋ 追加
+            </Button>
+          </Toolbar>
+        </Collapse>
       </AppBar>
 
       {/* 一覧 */}
@@ -1098,7 +1174,7 @@ export default function Page() {
         </DialogActions>
       </Dialog>
 
-      {/* 詳細モーダル（右上に編集ボタン追加済み） */}
+      {/* 詳細モーダル */}
       <ItemDetailDialog
         item={detailItem}
         open={!!detailItem}
@@ -1119,4 +1195,3 @@ export default function Page() {
     </ThemeProvider>
   );
 }
-
