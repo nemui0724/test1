@@ -15,97 +15,59 @@ type Draft = {
 type AIJson = { tags?: unknown; summary?: unknown; confidence?: unknown };
 
 const FIXED = [
-  "お金",
-  "購入",
-  "アカウント",
-  "タスク",
-  "サブスク",
-  "連絡",
-  "学校",
-  "仕事",
-  "重要",
-  "至急",
-  "解約",
-  "支払い",
-  "請求",
-  "更新",
-  "期日",
-  "メンテ",
-  "設定",
-  "障害",
-  "連携",
-  "動画",
-  "音楽",
-  "写真",
-  "学割",
-  "領収書",
-  "旅行",
-  "地名",
-  "日本",
+  "お金","購入","アカウント","タスク","サブスク","連絡","学校","仕事","重要","至急","解約","支払い",
+  "請求","更新","期日","メンテ","設定","障害","連携","動画","音楽","写真","学割","領収書","旅行","地名","日本"
 ] as const;
 
 const BRAND_TAGS: Record<string, string[]> = {
-  youtube: ["サブスク", "動画", "Google"],
-  "youtube premium": ["サブスク", "動画", "Google"],
-  netflix: ["サブスク", "動画"],
-  spotify: ["サブスク", "音楽"],
-  "prime video": ["サブスク", "動画", "Amazon"],
-  "apple music": ["サブスク", "音楽", "Apple"],
-  icloud: ["サブスク", "Apple"],
-  adobe: ["サブスク", "Adobe"],
-  microsoft: ["サブスク", "Microsoft"],
-  github: ["開発", "コード", "アカウント"],
+  youtube: ["サブスク","動画","Google"],
+  "youtube premium": ["サブスク","動画","Google"],
+  netflix: ["サブスク","動画"],
+  spotify: ["サブスク","音楽"],
+  "prime video": ["サブスク","動画","Amazon"],
+  "apple music": ["サブスク","音楽","Apple"],
+  icloud: ["サブスク","Apple"],
+  adobe: ["サブスク","Adobe"],
+  microsoft: ["サブスク","Microsoft"],
+  github: ["開発","コード","アカウント"],
   google: ["Google"],
 };
 
 const KEYWORD_TAGS: Array<[RegExp, string[]]> = [
-  [/(請求|支払|支払い|入金|料金|振込|引き落とし|明細|領収書)/i, ["お金", "請求"]],
+  [/(請求|支払|支払い|入金|料金|振込|引き落とし|明細|領収書)/i, ["お金","請求"]],
   [/(購入|買|発注|注文|納品|見積|請求書|領収書)/i, ["購入"]],
   [/(解約|退会|停止|キャンセル|解除)/i, ["解約"]],
-  [/(更新|自動更新|サブスク|subscription)/i, ["サブスク", "更新"]],
-  [/(todo|やる|締切|期限|提出|課題|タスク)/i, ["タスク", "期日"]],
-  [/(ログイン|account|アカウント|password|パスワード|2fa|otp|ユーザー)/i, ["アカウント", "認証"]],
+  [/(更新|自動更新|サブスク|subscription)/i, ["サブスク","更新"]],
+  [/(todo|やる|締切|期限|提出|課題|タスク)/i, ["タスク","期日"]],
+  [/(ログイン|account|アカウント|password|パスワード|2fa|otp|ユーザー)/i, ["アカウント","認証"]],
   [/(問い合わせ|連絡|メール|電話|サポート|サポセン)/i, ["連絡"]],
   [/(動画|movie|video|vod)/i, ["動画"]],
   [/(音楽|music|song|曲)/i, ["音楽"]],
 ];
 
 const GEO_TAGS: Array<[RegExp, string[]]> = [
-  [/(東京|tokyo)/i, ["地名", "日本", "旅行", "関東", "首都圏"]],
-  [/(京都|kyoto)/i, ["地名", "日本", "旅行", "関西"]],
-  [/(大阪|osaka)/i, ["地名", "日本", "旅行", "関西"]],
+  [/(東京|tokyo)/i, ["地名","日本","旅行","関東","首都圏"]],
+  [/(京都|kyoto)/i, ["地名","日本","旅行","関西"]],
+  [/(大阪|osaka)/i, ["地名","日本","旅行","関西"]],
 ];
 
 const SYN_EXPAND: Record<string, string[]> = {
-  解約: ["キャンセル", "退会", "停止"],
-  請求: ["支払い", "料金", "明細"],
-  サブスク: ["定額", "月額", "定期"],
-  動画: ["映像", "VOD", "配信"],
-  音楽: ["ミュージック", "楽曲", "ストリーミング"],
-  購入: ["注文", "ショッピング", "支出"],
-  アカウント: ["ログイン", "ユーザー", "認証"],
-  旅行: ["観光", "トラベル", "観光地"],
-  地名: ["ロケーション", "場所"],
-  重要: ["優先", "注目"],
-  期日: ["締切", "デッドライン"],
+  解約: ["キャンセル","退会","停止"],
+  請求: ["支払い","料金","明細"],
+  サブスク: ["定額","月額","定期"],
+  動画: ["映像","VOD","配信"],
+  音楽: ["ミュージック","楽曲","ストリーミング"],
+  購入: ["注文","ショッピング","支出"],
+  アカウント: ["ログイン","ユーザー","認証"],
+  旅行: ["観光","トラベル","観光地"],
+  地名: ["ロケーション","場所"],
+  重要: ["優先","注目"],
+  期日: ["締切","デッドライン"],
 };
 
 /* ===== Utils ===== */
 const isStringArray = (x: unknown): x is string[] =>
   Array.isArray(x) && x.every((v) => typeof v === "string");
-
-const safeString = (x: unknown): string => {
-  if (x instanceof Error) return x.message;
-  if (typeof x === "string") return x;
-  try {
-    return JSON.stringify(x);
-  } catch {
-    return String(x);
-  }
-};
-
-const trimPreview = (s: string, max = 600) =>
-  s.length > max ? s.slice(0, max) + " …(truncated)" : s;
 
 const extractJsonObject = (text: string): Record<string, unknown> | null => {
   const m = text.match(/\{[\s\S]*\}/);
@@ -184,6 +146,16 @@ const heuristic = (d: Draft) => {
   };
 };
 
+const errorMessage = (x: unknown): string => {
+  if (x instanceof Error) return x.message;
+  if (typeof x === "string") return x;
+  try {
+    return JSON.stringify(x);
+  } catch {
+    return String(x);
+  }
+};
+
 const isDraft = (x: unknown): x is Draft => {
   if (!x || typeof x !== "object") return false;
   const o = x as Record<string, unknown>;
@@ -193,22 +165,6 @@ const isDraft = (x: unknown): x is Draft => {
   if (o.username !== undefined && typeof o.username !== "string") return false;
   if (o.note !== undefined && typeof o.note !== "string") return false;
   return true;
-};
-
-// 生成系APIはたまに詰まるので、タイムアウト付きfetch
-const fetchWithTimeout = async (
-  input: RequestInfo | URL,
-  init: RequestInit,
-  ms = 15000
-) => {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), ms);
-  try {
-    const res = await fetch(input, { ...init, signal: ctrl.signal });
-    return res;
-  } finally {
-    clearTimeout(t);
-  }
 };
 
 export async function POST(req: NextRequest) {
@@ -245,12 +201,7 @@ export async function POST(req: NextRequest) {
   if (force) {
     const h = heuristic(draft);
     return NextResponse.json(
-      {
-        ...h,
-        model: "heuristic:force",
-        fallback: true,
-        ...(trace ? { debug: { forced: true } } : {}),
-      },
+      { ...h, model: "heuristic:force", fallback: true },
       { headers: { "Cache-Control": "no-store" } }
     );
   }
@@ -259,16 +210,10 @@ export async function POST(req: NextRequest) {
   const key = process.env.GEMINI_API_KEY;
   const looksLikeGoogleKey =
     typeof key === "string" && /^AIza[0-9A-Za-z_\-]{20,}$/.test(key || "");
-
   if (!key) {
     const h = heuristic(draft);
     return NextResponse.json(
-      {
-        ...h,
-        model: "heuristic:no-key",
-        fallback: true,
-        error: "GEMINI_API_KEY が未設定です。",
-      },
+      { ...h, model: "heuristic:no-key", fallback: true, error: "GEMINI_API_KEY が未設定です。" },
       { headers: { "Cache-Control": "no-store" } }
     );
   }
@@ -279,23 +224,23 @@ export async function POST(req: NextRequest) {
         ...h,
         model: "heuristic:bad-key",
         fallback: true,
-        error:
-          "GEMINI_API_KEY が Google 形式ではありません。`AIza...` で始まるキーを設定してください。",
+        error: "GEMINI_API_KEY が Google 形式ではありません。`AIza...` で始まるキーを設定してください。",
       },
       { headers: { "Cache-Control": "no-store" } }
     );
   }
 
-  // モデル候補（環境変数→既定）
-  const models = Array.from(
-    new Set(
-      [process.env.GEMINI_MODEL, "gemini-1.5-flash", "gemini-2.0-flash"].filter(
-        (m): m is string => typeof m === "string" && m.length > 0
+  try {
+    // まず SDK、ダメなら REST にフォールバック
+    const models = Array.from(
+      new Set(
+        [process.env.GEMINI_MODEL, "gemini-1.5-flash", "gemini-2.0-flash"].filter(
+          (m): m is string => typeof m === "string" && m.length > 0
+        )
       )
-    )
-  );
+    );
 
-  const prompt = `
+    const prompt = `
 あなたは日本語で「タイトル/メモ」からタグを返す分類器です。
 **必ず次のJSONだけ** を返してください（解説や文章は禁止）:
 {"tags":["タグ1","タグ2", ...], "summary":"要約", "confidence":0.0～1.0}
@@ -316,26 +261,16 @@ export async function POST(req: NextRequest) {
 固定候補（使っても良い）: ${FIXED.join(", ")}
 `.trim();
 
-  // trace用：試した履歴（キーは絶対に含めない）
-  const attempts: Array<{
-    model: string;
-    step: "sdk" | "rest";
-    ok: boolean;
-    info?: string;
-  }> = [];
+    let lastErr: unknown = null;
 
-  // 最後に失敗した理由（画面側に返す）
-  let lastErr: string | null = null;
-
-  try {
     for (const m of models) {
-      /* ---------------- 1) SDK ---------------- */
+      // -------- 1) SDK で試す --------
       try {
         const { GoogleGenerativeAI } = await import("@google/generative-ai");
         const genAI = new GoogleGenerativeAI(key);
         const mdl = genAI.getGenerativeModel({
           model: m,
-          generationConfig: { responseMimeType: "application/json" }, // JSON強制（対応していない環境では例外になる→catchへ）
+          generationConfig: { responseMimeType: "application/json" }, // JSON強制
         });
 
         const result = await mdl.generateContent(prompt);
@@ -348,52 +283,34 @@ export async function POST(req: NextRequest) {
           obj = extractJsonObject(text);
         }
 
-        const aiTags = isStringArray(obj?.tags) ? (obj!.tags as string[]) : [];
+        const aiTags = isStringArray(obj?.tags) ? (obj as AIJson).tags as string[] : [];
         const summary =
-          typeof obj?.summary === "string" && obj.summary.trim()
-            ? (obj.summary as string)
+          typeof obj?.summary === "string" && (obj as AIJson).summary?.toString().trim()
+            ? ((obj as AIJson).summary as string)
             : draft.title;
         const confidence =
-          typeof obj?.confidence === "number" ? (obj.confidence as number) : 0.7;
+          typeof obj?.confidence === "number" ? ((obj as AIJson).confidence as number) : 0.7;
 
         const base = `${draft.title} ${draft.note ?? ""}`.toLowerCase();
         const merged = ensureMinTags(aiTags, { base, url: draft.url }, 6, 10);
 
         const modelFailed = aiTags.length < 1;
 
-        attempts.push({
-          model: m,
-          step: "sdk",
-          ok: true,
-          info: modelFailed ? "parsed tags empty" : "ok",
-        });
-
         return NextResponse.json(
-          {
-            tags: merged,
-            summary,
-            confidence,
-            model: m,
-            fallback: modelFailed,
-            ...(trace ? { raw: trimPreview(text, 1200), debug: { attempts } } : {}),
-          },
+          { tags: merged, summary, confidence, model: m, fallback: modelFailed, ...(trace ? { raw: text } : {}) },
           { headers: { "Cache-Control": "no-store" } }
         );
       } catch (e: unknown) {
-        const msg = safeString(e);
-        lastErr = `SDK ${m}: ${msg}`;
-        attempts.push({ model: m, step: "sdk", ok: false, info: trimPreview(msg, 200) });
-        // SDK失敗 → 次にREST
+        lastErr = e;
+        // 続けて REST を試す
       }
 
-      /* ---------------- 2) REST ---------------- */
+      // -------- 2) REST 直叩きで試す --------
       try {
-        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
-          m
-        )}:generateContent?key=${encodeURIComponent(key)}`;
-
-        const resp = await fetchWithTimeout(
-          endpoint,
+        const resp = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+            m
+          )}:generateContent?key=${encodeURIComponent(key)}`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -401,33 +318,31 @@ export async function POST(req: NextRequest) {
               contents: [{ role: "user", parts: [{ text: prompt }] }],
               generationConfig: { responseMimeType: "application/json" },
             }),
-          },
-          15000
+          }
         );
 
         if (!resp.ok) {
-          const body = await resp.text().catch(() => "");
-          const msg = `REST ${m} HTTP ${resp.status}: ${trimPreview(body || resp.statusText, 800)}`;
-          lastErr = msg;
-          attempts.push({ model: m, step: "rest", ok: false, info: `HTTP ${resp.status}` });
+          lastErr = `REST ${m} HTTP ${resp.status}`;
           continue;
         }
 
         const j: unknown = await resp.json();
+        const candidates = Array.isArray((j as { candidates?: unknown }).candidates)
+          ? ((j as { candidates: unknown[] }).candidates as unknown[])
+          : [];
+        const content = candidates.length > 0 && typeof candidates[0] === "object"
+          ? ((candidates[0] as { content?: unknown }).content as unknown)
+          : undefined;
+        const parts = content && Array.isArray((content as { parts?: unknown }).parts)
+          ? ((content as { parts: unknown[] }).parts as unknown[])
+          : [];
 
-        // candidates[0].content.parts[0].text が一般的
-        const candidates = Array.isArray((j as any)?.candidates) ? (j as any).candidates : [];
-        const parts =
-          candidates?.[0]?.content?.parts && Array.isArray(candidates[0].content.parts)
-            ? candidates[0].content.parts
-            : [];
-
+        const part0 = parts[0] as { text?: unknown; inlineData?: { data?: unknown } } | undefined;
         const textRaw =
-          typeof parts?.[0]?.text === "string"
-            ? (parts[0].text as string)
-            : "{}";
-
-        const text = textRaw || "{}";
+          (part0?.text as string | undefined) ??
+          (part0?.inlineData?.data as string | undefined) ??
+          "{}";
+        const text = typeof textRaw === "string" ? textRaw : "{}";
 
         let obj: AIJson | null = null;
         try {
@@ -436,73 +351,40 @@ export async function POST(req: NextRequest) {
           obj = extractJsonObject(String(text));
         }
 
-        const aiTags = isStringArray(obj?.tags) ? (obj!.tags as string[]) : [];
+        const aiTags = isStringArray(obj?.tags) ? (obj as AIJson).tags as string[] : [];
         const summary =
-          typeof obj?.summary === "string" && obj.summary.trim()
-            ? (obj.summary as string)
+          typeof obj?.summary === "string" && (obj as AIJson).summary?.toString().trim()
+            ? ((obj as AIJson).summary as string)
             : draft.title;
         const confidence =
-          typeof obj?.confidence === "number" ? (obj.confidence as number) : 0.7;
+          typeof obj?.confidence === "number" ? ((obj as AIJson).confidence as number) : 0.7;
 
         const base = `${draft.title} ${draft.note ?? ""}`.toLowerCase();
         const merged = ensureMinTags(aiTags, { base, url: draft.url }, 6, 10);
 
         const modelFailed = aiTags.length < 1;
 
-        attempts.push({
-          model: `rest:${m}`,
-          step: "rest",
-          ok: true,
-          info: modelFailed ? "parsed tags empty" : "ok",
-        });
-
         return NextResponse.json(
-          {
-            tags: merged,
-            summary,
-            confidence,
-            model: `rest:${m}`,
-            fallback: modelFailed,
-            ...(trace ? { raw: trimPreview(text, 1200), debug: { attempts } } : {}),
-          },
+          { tags: merged, summary, confidence, model: `rest:${m}`, fallback: modelFailed, ...(trace ? { raw: text } : {}) },
           { headers: { "Cache-Control": "no-store" } }
         );
       } catch (e: unknown) {
-        const msg = safeString(e);
-        lastErr = `REST ${m}: ${msg}`;
-        attempts.push({
-          model: m,
-          step: "rest",
-          ok: false,
-          info: trimPreview(msg, 200),
-        });
-        continue; // 次のモデル
+        lastErr = e;
+        continue; // 次のモデルへ
       }
     }
 
-    // すべて失敗 → 200 + 保険（クライアント側で fallback を弾く設計）
+    // すべて失敗 → 200 + 保険
     const h = heuristic(draft);
     return NextResponse.json(
-      {
-        ...h,
-        model: "heuristic:fallback",
-        fallback: true,
-        error: lastErr ?? "unknown error",
-        ...(trace ? { debug: { attempts } } : {}),
-      },
+      { ...h, model: "heuristic:fallback", fallback: true, error: errorMessage(lastErr) },
       { headers: { "Cache-Control": "no-store" } }
     );
   } catch (e: unknown) {
-    // 想定外でも 200 + 保険
+    // 想定外でも 200 + 保険（UI は fallback を検知して保存中断できる）
     const h = heuristic(draft);
     return NextResponse.json(
-      {
-        ...h,
-        model: "heuristic:error",
-        fallback: true,
-        error: safeString(e),
-        ...(trace ? { debug: { attempts } } : {}),
-      },
+      { ...h, model: "heuristic:error", fallback: true, error: errorMessage(e) },
       { headers: { "Cache-Control": "no-store" } }
     );
   }

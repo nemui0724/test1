@@ -1,7 +1,7 @@
 // src/app/page.tsx
 "use client";
 
-import React, { useMemo, useState, useEffect, useRef } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import {
   AppBar,
   Avatar,
@@ -32,10 +32,9 @@ import {
   Toolbar,
   Typography,
   Alert,
-  Collapse,
-  useMediaQuery,
 } from "@mui/material";
 import { ThemeProvider, alpha, createTheme, styled } from "@mui/material/styles";
+import useMediaQuery from "@mui/material/useMediaQuery";
 import type { SelectChangeEvent } from "@mui/material/Select";
 
 // Firestore
@@ -344,6 +343,8 @@ function EditItemDialog({
       url?: string;
       username?: string;
       note?: string;
+      tags?: string[];
+      retagWithAI?: boolean;
     }
   ) => void;
 }) {
@@ -352,6 +353,10 @@ function EditItemDialog({
   const [url, setUrl] = useState(item?.url ?? "");
   const [username, setUsername] = useState(item?.username ?? "");
   const [note, setNote] = useState(item?.note ?? "");
+  const [tags, setTags] = useState<string[]>(item?.tags ?? []);
+  const [tagText, setTagText] = useState("");
+  const [retagWithAI, setRetagWithAI] = useState(true);
+
 
   useEffect(() => {
     setType(item?.type ?? "account");
@@ -359,6 +364,9 @@ function EditItemDialog({
     setUrl(item?.url ?? "");
     setUsername(item?.username ?? "");
     setNote(item?.note ?? "");
+    setTags(item?.tags ?? []);
+    setTagText("");
+    setRetagWithAI(true);
   }, [item, open]);
 
   const canSave = !!item && title.trim().length > 0;
@@ -371,6 +379,8 @@ function EditItemDialog({
       url: url || undefined,
       username: username || undefined,
       note: note || undefined,
+      tags,
+      retagWithAI,
     });
     onClose();
   };
@@ -445,9 +455,86 @@ function EditItemDialog({
             }}
           />
 
-          <Typography variant="body2" sx={{ opacity: 0.7 }}>
-            保存時に AI が再度タグ付けします。
-          </Typography>
+
+<Stack spacing={1}>
+  <Stack direction="row" alignItems="center" justifyContent="space-between">
+    <Typography variant="body2" sx={{ opacity: 0.8 }}>
+      保存時に AI でタグを更新
+    </Typography>
+    <Switch
+      checked={retagWithAI}
+      onChange={(e) => setRetagWithAI(e.target.checked)}
+      inputProps={{ "aria-label": "AIで再タグ付け" }}
+    />
+  </Stack>
+
+  <Typography variant="body2" sx={{ opacity: 0.7 }}>
+    {retagWithAI
+      ? "ON の場合：保存時に AI がタグを作り直します（手動編集は無効）"
+      : "OFF の場合：タグを手動で編集して保存します"}
+  </Typography>
+
+  <Typography variant="subtitle2">タグ（最大12）</Typography>
+
+  <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
+    {tags.length === 0 ? (
+      <Typography variant="body2" sx={{ opacity: 0.6 }}>
+        なし
+      </Typography>
+    ) : (
+      tags.map((t) => (
+        <Chip
+          key={t}
+          label={t}
+          onDelete={
+            retagWithAI ? undefined : () => setTags(tags.filter((x) => x !== t))
+          }
+          sx={{ mb: 1 }}
+        />
+      ))
+    )}
+  </Stack>
+
+  <Stack direction="row" spacing={1}>
+    <TextField
+      label="タグを追加"
+      size="small"
+      value={tagText}
+      onChange={(e) => setTagText(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          const t = tagText.trim();
+          if (!t || retagWithAI) return;
+          if (tags.includes(t)) {
+            setTagText("");
+            return;
+          }
+          setTags([...tags, t].slice(0, 12));
+          setTagText("");
+        }
+      }}
+      disabled={retagWithAI}
+      fullWidth
+    />
+    <Button
+      variant="outlined"
+      onClick={() => {
+        const t = tagText.trim();
+        if (!t || retagWithAI) return;
+        if (tags.includes(t)) {
+          setTagText("");
+          return;
+        }
+        setTags([...tags, t].slice(0, 12));
+        setTagText("");
+      }}
+      disabled={retagWithAI || tagText.trim().length === 0}
+    >
+      追加
+    </Button>
+  </Stack>
+</Stack>
         </Stack>
       </DialogContent>
       <DialogActions>
@@ -499,9 +586,13 @@ function ItemDetailDialog({
           <Typography variant="body2">
             種類: <b>{item.type}</b>
           </Typography>
-          <Typography variant="body2">作成: {formatJST(item.createdAt)}</Typography>
+          <Typography variant="body2">
+            作成: {formatJST(item.createdAt)}
+          </Typography>
           {item.updatedAt ? (
-            <Typography variant="body2">更新: {formatJST(item.updatedAt)}</Typography>
+            <Typography variant="body2">
+              更新: {formatJST(item.updatedAt)}
+            </Typography>
           ) : null}
           {item.username && (
             <Typography variant="body2">識別子: {item.username}</Typography>
@@ -725,48 +816,45 @@ export default function Page() {
   const [dark, setDark] = useState(true);
   const theme = useAppTheme(dark ? "dark" : "light");
 
-  // ★ スマホだけ：下スクロールでヘッダーを縮め、上スクロールで戻す
-  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
-  const [compactHeader, setCompactHeader] = useState(false);
-  const lastYRef = useRef(0);
-  const searchRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    if (!isMobile) {
-      setCompactHeader(false);
-      return;
-    }
+// ===== モバイルUI：スクロールでヘッダーを縮小 =====
+const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+const [mobileCompact, setMobileCompact] = useState(false);
+const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
 
-    lastYRef.current = window.scrollY || 0;
+useEffect(() => {
+  if (!isMobile) {
+    setMobileCompact(false);
+    return;
+  }
 
-    const MIN_Y_TO_COMPACT = 80; // ここより下で縮む
-    const DELTA = 12; // 小さな揺れは無視
-    let ticking = false;
+  let lastY = window.scrollY;
+  let ticking = false;
 
-    const onScroll = () => {
-      const y = window.scrollY || 0;
-      if (ticking) return;
-      ticking = true;
+  const onScroll = () => {
+    const y = window.scrollY;
+    if (ticking) return;
+    ticking = true;
 
-      window.requestAnimationFrame(() => {
-        const dy = y - lastYRef.current;
+    window.requestAnimationFrame(() => {
+      const delta = y - lastY;
 
-        if (y < 24) {
-          setCompactHeader(false);
-        } else if (dy > DELTA && y > MIN_Y_TO_COMPACT) {
-          setCompactHeader(true);
-        } else if (dy < -DELTA) {
-          setCompactHeader(false);
-        }
+      if (y < 24) {
+        setMobileCompact(false);
+      } else if (delta > 8) {
+        setMobileCompact(true);
+      } else if (delta < -8) {
+        setMobileCompact(false);
+      }
 
-        lastYRef.current = y;
-        ticking = false;
-      });
-    };
+      lastY = y;
+      ticking = false;
+    });
+  };
 
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, [isMobile]);
+  window.addEventListener("scroll", onScroll, { passive: true });
+  return () => window.removeEventListener("scroll", onScroll);
+}, [isMobile]);
 
   // Firestore 購読
   const [items, setItems] = useState<Item[]>([]);
@@ -838,7 +926,7 @@ export default function Page() {
   // Fuse.js であいまい検索
   const searched = useFuseSearch<SearchItem>({
     items: itemsForSearch,
-    search: queryText,
+    search: queryText, // 入力そのまま（カタカナ/ひらがな/漢字どれでもOK）
     keys: FUSE_KEYS,
     threshold: 0.5,
     distance: 100,
@@ -895,7 +983,7 @@ export default function Page() {
         setErrorMsg(
           "AIタグが生成されませんでした。内容を少し詳しくして再試行してください。"
         );
-        return;
+        return; // 未分類で保存しない
       }
 
       await addDoc(collection(db, "items"), {
@@ -932,53 +1020,65 @@ export default function Page() {
       url?: string;
       username?: string;
       note?: string;
+      tags?: string[];
+      retagWithAI?: boolean;
     }
   ) => {
     setErrorMsg(null);
 
+    const doRetag = patch.retagWithAI !== false; // デフォルトは従来通りON
+
     const contentLen =
       (patch.title?.trim().length || 0) + (patch.note?.trim().length || 0);
-    if (contentLen < 3) {
-      setErrorMsg("タイトル/メモが短すぎます（3文字以上にしてください）");
+    if (doRetag && contentLen < 3) {
+      setErrorMsg("AIタグ付けするにはタイトル/メモを3文字以上にしてください（手動保存ならOK）");
       return;
     }
 
-    try {
-      const data = await aiTag(
-        {
-          title: patch.title,
-          type: patch.type,
-          url: patch.url,
-          username: patch.username,
-          note: patch.note,
-        } as AiDraft,
-        { allowFallback: false }
-      );
 
-      const tags = Array.isArray(data.tags) ? data.tags : [];
-      if (!tags.length) {
-        setErrorMsg(
-          "AIタグが生成されませんでした。内容を少し詳しくして再試行してください。"
-        );
-        return;
-      }
-
-      await updateDoc(doc(db, "items", id), {
+try {
+  if (doRetag) {
+    const data = await aiTag(
+      {
         title: patch.title,
         type: patch.type,
-        url: patch.url ?? null,
-        username: patch.username ?? null,
-        note: patch.note ?? null,
-        tags: tags.slice(0, 12),
-        aiSummary: (data as { summary?: string }).summary ?? null,
-        aiConfidence:
-          typeof (data as { confidence?: unknown }).confidence === "number"
-            ? ((data as { confidence: number }).confidence as number)
-            : null,
-        aiModel: (data as { model?: string }).model ?? null,
-        lastTaggedAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
+        url: patch.url,
+        username: patch.username,
+        note: patch.note,
+      },
+      { trace: false }
+    );
+
+    const tags = (data as { tags?: string[] }).tags ?? [];
+
+    await updateDoc(doc(db, "items", id), {
+      title: patch.title.trim(),
+      type: patch.type,
+      url: patch.url ?? null,
+      username: patch.username ?? null,
+      note: patch.note ?? null,
+      tags: tags.slice(0, 12),
+      aiSummary: (data as { summary?: string }).summary ?? null,
+      aiConfidence:
+        typeof (data as { confidence?: unknown }).confidence === "number"
+          ? ((data as { confidence: number }).confidence as number)
+          : null,
+      aiModel: (data as { model?: string }).model ?? null,
+      lastTaggedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+  } else {
+    const nextTags = Array.isArray(patch.tags) ? patch.tags.slice(0, 12) : [];
+    await updateDoc(doc(db, "items", id), {
+      title: patch.title.trim(),
+      type: patch.type,
+      url: patch.url ?? null,
+      username: patch.username ?? null,
+      note: patch.note ?? null,
+      tags: nextTags,
+      updatedAt: serverTimestamp(),
+    });
+  }
     } catch (e: unknown) {
       setErrorMsg(
         e instanceof Error
@@ -1007,105 +1107,174 @@ export default function Page() {
         </Alert>
       )}
 
-      {/* ヘッダー（スマホだけ縮む） */}
-      <AppBar position="sticky" elevation={4}>
-        {/* 1段目 */}
-        <Toolbar
-          sx={{
-            gap: 2,
-            transition: "all .2s",
-            minHeight: isMobile && compactHeader ? 48 : undefined,
-            px: isMobile && compactHeader ? 1 : 2,
-          }}
-        >
-          <Typography
-            variant={isMobile && compactHeader ? "subtitle1" : "h6"}
-            fontWeight={900}
-            sx={{ whiteSpace: "nowrap" }}
-          >
-            卒研タイトル考えるサイト
-          </Typography>
-
-          <Box sx={{ flex: 1, display: "flex", justifyContent: "center" }}>
-            {isMobile && compactHeader ? (
-              <IconButton
-                aria-label="検索を表示"
-                onClick={() => {
-                  setCompactHeader(false);
-                  setTimeout(() => searchRef.current?.focus(), 0);
-                }}
-              >
-                🔎
-              </IconButton>
-            ) : (
-              <TextField
-                inputRef={searchRef}
-                placeholder="検索 (タイトル・タグ・URL)"
-                value={queryText}
-                onChange={(e) => setQueryText(e.target.value)}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">🔎</InputAdornment>
-                  ),
-                }}
+      {/* ヘッダー */}
+            <AppBar position="sticky" elevation={4}>
+              <Toolbar
                 sx={{
-                  width: { xs: "100%", sm: 560 },
-                  maxWidth: { xs: "100%", sm: "60vw" },
+                  gap: 1.5,
+                  px: { xs: 1, sm: 2 },
+                  minHeight: { xs: mobileCompact ? 48 : 64, sm: 64 },
+                  transition: "min-height 180ms ease",
                 }}
-              />
-            )}
-          </Box>
-
-          <IconButton
-            onClick={() => setSettingsOpen(true)}
-            aria-label="設定を開く"
-          >
-            ⚙️
-          </IconButton>
-        </Toolbar>
-
-        {/* 2段目（スマホで縮んだら畳む） */}
-        <Collapse in={!isMobile || !compactHeader} timeout={180} unmountOnExit>
-          <Toolbar sx={{ justifyContent: "center", gap: 2, pt: 0 }}>
-            <FormControl size="small" sx={{ minWidth: 140 }}>
-              <InputLabel>種類</InputLabel>
-              <Select
-                label="種類"
-                value={typeFilter}
-                onChange={(e: SelectChangeEvent) =>
-                  setTypeFilter(e.target.value as "all" | ItemType)
-                }
               >
-                <MenuItem value="all">すべて</MenuItem>
-                <MenuItem value="account">アカウント</MenuItem>
-                <MenuItem value="todo">ToDo</MenuItem>
-                <MenuItem value="subscription">サブスク</MenuItem>
-                <MenuItem value="memo">メモ</MenuItem>
-              </Select>
-            </FormControl>
+                <Typography
+                  variant="h6"
+                  fontWeight={900}
+                  sx={{
+                    display: { xs: mobileCompact ? "none" : "block", sm: "block" },
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  InfoPocket（仮）
+                </Typography>
 
-            <FormControl size="small" sx={{ minWidth: 140 }}>
-              <InputLabel>並び替え</InputLabel>
-              <Select
-                label="並び替え"
-                value={sortKey}
-                onChange={(e: SelectChangeEvent) =>
-                  setSortKey(e.target.value as "recent" | "title")
-                }
+                <Box sx={{ flex: 1, display: "flex", justifyContent: "center" }}>
+                  <TextField
+                    placeholder="検索 (タイトル・タグ・URL)"
+                    value={queryText}
+                    onChange={(e) => setQueryText(e.target.value)}
+                    size={isMobile ? "small" : "medium"}
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">🔎</InputAdornment>
+                      ),
+                    }}
+                    sx={{
+                      width: { xs: "100%", sm: 560 },
+                      maxWidth: { xs: "100%", sm: "60vw" },
+                    }}
+                  />
+                </Box>
+
+                <IconButton
+                  onClick={() => setMobileFilterOpen(true)}
+                  aria-label="フィルタ"
+                  sx={{ display: { xs: mobileCompact ? "inline-flex" : "none", sm: "none" } }}
+                >
+                  🧰
+                </IconButton>
+
+                <Button
+                  variant="contained"
+                  size="small"
+                  onClick={() => setAddOpen(true)}
+                  sx={{
+                    display: { xs: "inline-flex", sm: "none" },
+                    minWidth: 0,
+                    px: 1.2,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  ＋
+                </Button>
+
+                <IconButton
+                  onClick={() => setSettingsOpen(true)}
+                  aria-label="設定を開く"
+                >
+                  ⚙️
+                </IconButton>
+              </Toolbar>
+
+              <Toolbar
+                sx={{
+                  justifyContent: "center",
+                  gap: 2,
+                  pt: 0,
+                  display: { xs: mobileCompact ? "none" : "flex", sm: "flex" },
+                  transition: "min-height 180ms ease",
+                }}
               >
-                <MenuItem value="recent">新着順</MenuItem>
-                <MenuItem value="title">タイトル順</MenuItem>
-              </Select>
-            </FormControl>
+                <FormControl size="small" sx={{ minWidth: 140 }}>
+                  <InputLabel>種類</InputLabel>
+                  <Select
+                    label="種類"
+                    value={typeFilter}
+                    onChange={(e: SelectChangeEvent) =>
+                      setTypeFilter(e.target.value as "all" | ItemType)
+                    }
+                  >
+                    <MenuItem value="all">すべて</MenuItem>
+                    <MenuItem value="account">アカウント</MenuItem>
+                    <MenuItem value="todo">ToDo</MenuItem>
+                    <MenuItem value="subscription">サブスク</MenuItem>
+                    <MenuItem value="memo">メモ</MenuItem>
+                  </Select>
+                </FormControl>
 
-            <Button variant="outlined" onClick={() => setAddOpen(true)}>
-              ＋ 追加
-            </Button>
-          </Toolbar>
-        </Collapse>
-      </AppBar>
+                <FormControl size="small" sx={{ minWidth: 140 }}>
+                  <InputLabel>並び替え</InputLabel>
+                  <Select
+                    label="並び替え"
+                    value={sortKey}
+                    onChange={(e: SelectChangeEvent) =>
+                      setSortKey(e.target.value as "recent" | "title")
+                    }
+                  >
+                    <MenuItem value="recent">新着順</MenuItem>
+                    <MenuItem value="title">タイトル順</MenuItem>
+                  </Select>
+                </FormControl>
 
-      {/* 一覧 */}
+                <Button
+                  variant="outlined"
+                  onClick={() => setAddOpen(true)}
+                  sx={{ display: { xs: "none", sm: "inline-flex" } }}
+                >
+                  ＋ 追加
+                </Button>
+              </Toolbar>
+            </AppBar>
+
+      
+{/* モバイル用：フィルタ/並び替え（縮小時に使う） */}
+<Dialog
+  open={mobileFilterOpen}
+  onClose={() => setMobileFilterOpen(false)}
+  fullWidth
+  maxWidth="xs"
+>
+  <DialogTitle>絞り込み</DialogTitle>
+  <DialogContent>
+    <Stack spacing={2} sx={{ mt: 1 }}>
+      <FormControl size="small" fullWidth>
+        <InputLabel>種類</InputLabel>
+        <Select
+          label="種類"
+          value={typeFilter}
+          onChange={(e: SelectChangeEvent) =>
+            setTypeFilter(e.target.value as "all" | ItemType)
+          }
+        >
+          <MenuItem value="all">すべて</MenuItem>
+          <MenuItem value="account">アカウント</MenuItem>
+          <MenuItem value="todo">ToDo</MenuItem>
+          <MenuItem value="subscription">サブスク</MenuItem>
+          <MenuItem value="memo">メモ</MenuItem>
+        </Select>
+      </FormControl>
+
+      <FormControl size="small" fullWidth>
+        <InputLabel>並び替え</InputLabel>
+        <Select
+          label="並び替え"
+          value={sortKey}
+          onChange={(e: SelectChangeEvent) =>
+            setSortKey(e.target.value as "recent" | "title")
+          }
+        >
+          <MenuItem value="recent">新着順</MenuItem>
+          <MenuItem value="title">タイトル順</MenuItem>
+        </Select>
+      </FormControl>
+    </Stack>
+  </DialogContent>
+  <DialogActions>
+    <Button onClick={() => setMobileFilterOpen(false)}>閉じる</Button>
+  </DialogActions>
+</Dialog>
+
+{/* 一覧 */}
       <Container maxWidth="lg" sx={{ py: 3 }}>
         <Box
           sx={{
@@ -1174,7 +1343,7 @@ export default function Page() {
         </DialogActions>
       </Dialog>
 
-      {/* 詳細モーダル */}
+      {/* 詳細モーダル（右上に編集ボタン追加済み） */}
       <ItemDetailDialog
         item={detailItem}
         open={!!detailItem}
