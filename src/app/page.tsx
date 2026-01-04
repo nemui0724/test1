@@ -1125,7 +1125,7 @@ try {
                     whiteSpace: "nowrap",
                   }}
                 >
-                  InfoPocket（仮）
+                  卒研
                 </Typography>
 
                 <Box sx={{ flex: 1, display: "flex", justifyContent: "center" }}>
