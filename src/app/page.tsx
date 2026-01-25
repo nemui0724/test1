@@ -1088,7 +1088,7 @@ export default function Page() {
                 fontWeight={900}
                 sx={{ whiteSpace: "nowrap", textAlign: "center" }}
               >
-                InfoPocket（仮）
+                AI Tag Box
               </Typography>
 
               <TextField
