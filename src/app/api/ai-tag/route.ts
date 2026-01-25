@@ -364,7 +364,7 @@ export async function POST(req: NextRequest) {
         );
       } catch (e: unknown) {
         lastErr = e;
-        continue; // 次のモデルへ
+        continue;
       }
     }
 

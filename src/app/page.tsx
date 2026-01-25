@@ -484,6 +484,7 @@ function EditItemDialog({
             )}
           </Stack>
 
+          {/* 手動編集が有効な時だけ「追加UI」を表示 */}
           {canManualTagEdit ? (
             <Stack direction="row" spacing={1}>
               <TextField
@@ -611,6 +612,7 @@ function ItemDetailDialog({
   );
 }
 
+/* -------------------- Card -------------------- */
 function ItemCard({
   item,
   onDelete,
@@ -807,9 +809,11 @@ function ItemCard({
   );
 }
 
+/* -------------------- Page -------------------- */
 export default function Page() {
   const theme = useAppTheme();
 
+  // mobile header compact (down scroll -> compact, up scroll -> expand)
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const [compactHeader, setCompactHeader] = useState(false);
   const lastYRef = useRef(0);
@@ -852,6 +856,7 @@ export default function Page() {
     return () => window.removeEventListener("scroll", onScroll);
   }, [isMobile]);
 
+  // data
   const [items, setItems] = useState<Item[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -888,6 +893,7 @@ export default function Page() {
     }
   }, []);
 
+  // UI state
   const [queryText, setQueryText] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | ItemType>("all");
   const [sortKey, setSortKey] = useState<"recent" | "title">("recent");
@@ -895,6 +901,7 @@ export default function Page() {
   const [detailItem, setDetailItem] = useState<Item | null>(null);
   const [editItem, setEditItem] = useState<Item | null>(null);
 
+  // search prepare
   const itemsForSearch = useMemo<SearchItem[]>(() => {
     return items.map((it) => {
       const titleKana = normalizeKana(it.title);
@@ -940,6 +947,7 @@ export default function Page() {
     return arr;
   }, [searched, sortKey, typeFilter]);
 
+  // actions
   const deleteItem = async (id: string) => {
     await deleteDoc(doc(db, "items", id));
   };
@@ -1049,63 +1057,101 @@ export default function Page() {
       ) : null}
 
       <AppBar position="sticky" elevation={4}>
-      <Toolbar
-  sx={{
-    transition: "all .2s",
-    minHeight: isMobile && compactHeader ? 48 : undefined,
-    px: isMobile && compactHeader ? 1 : 2,
+        <Toolbar
+          sx={{
+            transition: "all .2s",
+            minHeight: isMobile && compactHeader ? 48 : undefined,
+            px: isMobile && compactHeader ? 1 : 2,
+            ...(isMobile && !compactHeader
+              ? {
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "stretch",
+                  gap: 1,
+                  py: 1,
+                }
+              : {
+                  display: "grid",
+                  gridTemplateColumns:
+                    isMobile && compactHeader
+                      ? "1fr auto 1fr"
+                      : "1fr minmax(260px, 560px) 1fr",
+                  alignItems: "center",
+                  columnGap: 16,
+                }),
+          }}
+        >
+          {isMobile && !compactHeader ? (
+            <>
+              <Typography
+                variant="h6"
+                fontWeight={900}
+                sx={{ whiteSpace: "nowrap", textAlign: "center" }}
+              >
+                InfoPocket（仮）
+              </Typography>
 
-    // ★ ここがポイント：3カラムにして中央を固定
-    display: "grid",
-    gridTemplateColumns:
-      isMobile && compactHeader
-        ? "1fr auto 1fr"
-        : "1fr minmax(260px, 560px) 1fr",
-    alignItems: "center",
-    columnGap: 16,
-  }}
->
-  {/* 左：タイトル */}
-  <Typography
-    variant={isMobile && compactHeader ? "subtitle1" : "h6"}
-    fontWeight={900}
-    sx={{ whiteSpace: "nowrap", justifySelf: "start" }}
-  >
-    AI Tag Box
-  </Typography>
+              <TextField
+                inputRef={searchRef}
+                placeholder="検索 (タイトル・タグ・URL)"
+                value={queryText}
+                onChange={(e) => setQueryText(e.target.value)}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">🔎</InputAdornment>
+                  ),
+                }}
+                sx={{
+                  width: "100%",
+                  maxWidth: 560,
+                  mx: "auto",
+                }}
+              />
+            </>
+          ) : (
+            <>
+              <Typography
+                variant={isMobile && compactHeader ? "subtitle1" : "h6"}
+                fontWeight={900}
+                sx={{ whiteSpace: "nowrap", justifySelf: "start" }}
+              >
+                AI Tag Box
+              </Typography>
 
-  {/* 中央：検索 */}
-  {isMobile && compactHeader ? (
-    <IconButton
-      aria-label="検索を表示"
-      sx={{ justifySelf: "center" }}
-      onClick={() => {
-        setCompactHeader(false);
-        setTimeout(() => searchRef.current?.focus(), 0);
-      }}
-    >
-      🔎
-    </IconButton>
-  ) : (
-    <TextField
-      inputRef={searchRef}
-      placeholder="検索 (タイトル・タグ・URL)"
-      value={queryText}
-      onChange={(e) => setQueryText(e.target.value)}
-      InputProps={{
-        startAdornment: <InputAdornment position="start">🔎</InputAdornment>,
-      }}
-      sx={{
-        justifySelf: "center",
-        width: "100%",
-      }}
-    />
-  )}
+              {isMobile && compactHeader ? (
+                <IconButton
+                  aria-label="検索を表示"
+                  sx={{ justifySelf: "center" }}
+                  onClick={() => {
+                    setCompactHeader(false);
+                    setTimeout(() => searchRef.current?.focus(), 0);
+                  }}
+                >
+                  🔎
+                </IconButton>
+              ) : (
+                <TextField
+                  inputRef={searchRef}
+                  placeholder="検索 (タイトル・タグ・URL)"
+                  value={queryText}
+                  onChange={(e) => setQueryText(e.target.value)}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">🔎</InputAdornment>
+                    ),
+                  }}
+                  sx={{
+                    justifySelf: "center",
+                    width: "100%",
+                    maxWidth: { xs: "100%", sm: 560 },
+                  }}
+                />
+              )}
 
-  {/* 右：ダミー（中央ズレ防止用） */}
-  <Box sx={{ justifySelf: "end" }} />
-</Toolbar>
-
+              <Box sx={{ justifySelf: "end" }} />
+            </>
+          )}
+        </Toolbar>
 
         <Collapse in={!isMobile || !compactHeader} timeout={180} unmountOnExit>
           <Toolbar sx={{ justifyContent: "center", gap: 2, pt: 0 }}>
@@ -1136,8 +1182,12 @@ export default function Page() {
               </Select>
             </FormControl>
 
-            <Button variant="outlined" onClick={() => setAddOpen(true)}>
-              ＋ 追加
+            <Button
+              variant="outlined"
+              onClick={() => setAddOpen(true)}
+              sx={isMobile ? { minWidth: 44, px: 0 } : undefined}
+            >
+              ＋{isMobile ? "" : " 追加"}
             </Button>
           </Toolbar>
         </Collapse>
