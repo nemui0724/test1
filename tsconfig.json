@@ -14,7 +14,7 @@
     "jsx": "preserve",
     "incremental": true,
     "plugins": [{ "name": "next" }],
-    "baseUrl": ".",                    // ★ これだけ追加
+    "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]
     }

@@ -1,7 +1,7 @@
 // src/app/layout.tsx
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import AnalyticsInit from "@/components/AnalyticsInit"; // ★ 追加
+import AnalyticsInit from "@/components/AnalyticsInit"; 
 
 export const metadata: Metadata = {
   title: "卒研デモ",

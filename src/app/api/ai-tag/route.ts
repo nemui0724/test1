@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
-export const dynamic = "force-dynamic"; // 生成系はキャッシュ回避
+export const dynamic = "force-dynamic";
 
 type Draft = {
   title: string;
@@ -86,7 +86,7 @@ const addFromUrl = (url: string | undefined, into: Set<string>) => {
     const host = u.hostname.toLowerCase();
     into.add(host); // 例: youtube.com
     const parts = host.split(".").filter(Boolean);
-    if (parts.length >= 2) into.add(parts[parts.length - 2]); // youtube
+    if (parts.length >= 2) into.add(parts[parts.length - 2]);
     for (const k of Object.keys(BRAND_TAGS)) {
       if (host.includes(k)) BRAND_TAGS[k].forEach((t) => into.add(t));
     }
@@ -197,7 +197,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // デバッグ: 強制ヒューリスティック
   if (force) {
     const h = heuristic(draft);
     return NextResponse.json(
@@ -206,7 +205,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // キー検証
   const key = process.env.GEMINI_API_KEY;
   const looksLikeGoogleKey =
     typeof key === "string" && /^AIza[0-9A-Za-z_\-]{20,}$/.test(key || "");
@@ -231,7 +229,6 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    // まず SDK、ダメなら REST にフォールバック
     const models = Array.from(
       new Set(
         [process.env.GEMINI_MODEL, "gemini-1.5-flash", "gemini-2.0-flash"].filter(
@@ -264,7 +261,6 @@ export async function POST(req: NextRequest) {
     let lastErr: unknown = null;
 
     for (const m of models) {
-      // -------- 1) SDK で試す --------
       try {
         const { GoogleGenerativeAI } = await import("@google/generative-ai");
         const genAI = new GoogleGenerativeAI(key);
@@ -302,10 +298,8 @@ export async function POST(req: NextRequest) {
         );
       } catch (e: unknown) {
         lastErr = e;
-        // 続けて REST を試す
       }
 
-      // -------- 2) REST 直叩きで試す --------
       try {
         const resp = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
@@ -374,14 +368,12 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // すべて失敗 → 200 + 保険
     const h = heuristic(draft);
     return NextResponse.json(
       { ...h, model: "heuristic:fallback", fallback: true, error: errorMessage(lastErr) },
       { headers: { "Cache-Control": "no-store" } }
     );
   } catch (e: unknown) {
-    // 想定外でも 200 + 保険（UI は fallback を検知して保存中断できる）
     const h = heuristic(draft);
     return NextResponse.json(
       { ...h, model: "heuristic:error", fallback: true, error: errorMessage(e) },

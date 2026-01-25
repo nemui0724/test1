@@ -5,9 +5,9 @@ import Fuse from "fuse.js";
 type UseFuseSearchParams<T> = {
   items: T[];
   search: string;
-  keys: string[];     // 検索対象にするフィールド名
-  threshold?: number; // あいまい度（0〜1）
-  distance?: number;  // どれくらい離れた位置まで許容するか
+  keys: string[];
+  threshold?: number;
+  distance?: number;
 };
 
 export function useFuseSearch<T>({
@@ -15,7 +15,7 @@ export function useFuseSearch<T>({
   search,
   keys,
   threshold = 0.5,
-  distance = 100,  // ← タイプミスに少し強くする
+  distance = 100,
 }: UseFuseSearchParams<T>): T[] {
   const fuse = useMemo(() => {
     if (!items.length) return null;

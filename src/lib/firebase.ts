@@ -14,17 +14,14 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
-// initializeApp は1回だけ
 export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
 
-// ---- Analyticsはクライアント＆対応環境のみ ----
 let _analyticsPromise: Promise<import("firebase/analytics").Analytics | null> | null = null;
 
-/** 必要な画面で呼ぶ： const an = await getAnalyticsClient() */
 export function getAnalyticsClient() {
   if (_analyticsPromise) return _analyticsPromise;
   if (typeof window === "undefined") {

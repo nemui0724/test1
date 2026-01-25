@@ -1097,7 +1097,7 @@ export default function Page() {
       }}
       sx={{
         justifySelf: "center",
-        width: "100%", // ★ 中央カラムいっぱいを使う
+        width: "100%",
       }}
     />
   )}
