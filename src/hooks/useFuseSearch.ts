@@ -1,4 +1,3 @@
-// src/hooks/useFuseSearch.ts
 import { useMemo } from "react";
 import Fuse from "fuse.js";
 

@@ -1,4 +1,3 @@
-// src/app/api/ai-tag/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";

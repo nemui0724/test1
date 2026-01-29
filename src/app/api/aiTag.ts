@@ -1,5 +1,3 @@
-// src/app/api/aiTag.ts
-
 export type Draft = {
   title: string;
   type: "account" | "todo" | "subscription" | "memo" | string;

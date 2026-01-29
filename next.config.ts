@@ -1,5 +1,3 @@
-// next.config.ts
-
 const nextConfig = {
   reactStrictMode: true,
   allowedDevOrigins: [

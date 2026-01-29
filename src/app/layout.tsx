@@ -1,4 +1,3 @@
-// src/app/layout.tsx
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import AnalyticsInit from "@/components/AnalyticsInit"; 
