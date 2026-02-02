@@ -110,8 +110,12 @@ const toEpochMillis = (v: unknown): number => {
   return Date.now();
 };
 
+/**
+ * 【修正ポイント1】
+ * ローマ字・カタカナ入力を確実にひらがなへ揃えるため、toLowerCase()を追加
+ */
 const normalizeKana = (input: string | null | undefined): string =>
-  input ? toHiragana(input) : "";
+  input ? toHiragana(input.toLowerCase()).trim() : "";
 
 const isNonEmptyStringArray = (v: unknown): v is string[] =>
   Array.isArray(v) && v.every((x) => typeof x === "string" && x.trim().length > 0);
@@ -483,7 +487,6 @@ function EditItemDialog({
             )}
           </Stack>
 
-          {/* 手動編集が有効な時だけ「追加UI」を表示 */}
           {canManualTagEdit ? (
             <Stack direction="row" spacing={1}>
               <TextField
@@ -812,7 +815,7 @@ function ItemCard({
 export default function Page() {
   const theme = useAppTheme();
 
-  // mobile header compact (down scroll -> compact, up scroll -> expand)
+  // mobile header compact
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const [compactHeader, setCompactHeader] = useState(false);
   const lastYRef = useRef(0);
@@ -823,21 +826,16 @@ export default function Page() {
       setCompactHeader(false);
       return;
     }
-
     lastYRef.current = window.scrollY || 0;
-
     const MIN_Y_TO_COMPACT = 80;
     const DELTA = 12;
     let ticking = false;
-
     const onScroll = () => {
       const y = window.scrollY || 0;
       if (ticking) return;
       ticking = true;
-
       window.requestAnimationFrame(() => {
         const dy = y - lastYRef.current;
-
         if (y < 24) {
           setCompactHeader(false);
         } else if (dy > DELTA && y > MIN_Y_TO_COMPACT) {
@@ -845,12 +843,10 @@ export default function Page() {
         } else if (dy < -DELTA) {
           setCompactHeader(false);
         }
-
         lastYRef.current = y;
         ticking = false;
       });
     };
-
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, [isMobile]);
@@ -865,9 +861,6 @@ export default function Page() {
       const unsub = onSnapshot(q, (snap) => {
         const arr: Item[] = snap.docs.map((d) => {
           const data = d.data() as Record<string, unknown>;
-          const created = toEpochMillis(data.createdAt);
-          const updated = data.updatedAt !== undefined ? toEpochMillis(data.updatedAt) : null;
-
           return {
             id: d.id,
             title: (data.title as string) ?? "",
@@ -876,8 +869,8 @@ export default function Page() {
             username: (data.username as string) ?? null,
             note: (data.note as string) ?? null,
             tags: Array.isArray(data.tags) ? (data.tags as string[]) : [],
-            createdAt: created,
-            updatedAt: updated,
+            createdAt: toEpochMillis(data.createdAt),
+            updatedAt: data.updatedAt !== undefined ? toEpochMillis(data.updatedAt) : null,
             aiSummary: typeof data.aiSummary === "string" ? data.aiSummary : null,
             aiConfidence: typeof data.aiConfidence === "number" ? data.aiConfidence : null,
             aiModel: typeof data.aiModel === "string" ? data.aiModel : null,
@@ -900,7 +893,10 @@ export default function Page() {
   const [detailItem, setDetailItem] = useState<Item | null>(null);
   const [editItem, setEditItem] = useState<Item | null>(null);
 
-  // search prepare
+  /**
+   * 【修正ポイント2】
+   * データ側の各プロパティをあらかじめひらがな化して保持
+   */
   const itemsForSearch = useMemo<SearchItem[]>(() => {
     return items.map((it) => {
       const titleKana = normalizeKana(it.title);
@@ -919,8 +915,13 @@ export default function Page() {
     });
   }, [items]);
 
+  /**
+   * 【修正ポイント3】
+   * 検索クエリも正規化（ひらがな化）してからFuseに渡す
+   * これにより、入力がローマ字でもカタカナでもヒットするようになる
+   */
   const searched = useMemo(() => {
-    const q = queryText.trim();
+    const q = normalizeKana(queryText.trim()); // クエリ側もひらがな化
     if (!q) return itemsForSearch;
 
     const fuse = new Fuse(itemsForSearch, {
@@ -935,9 +936,7 @@ export default function Page() {
 
   const filtered = useMemo(() => {
     let arr = searched;
-
     if (typeFilter !== "all") arr = arr.filter((it) => it.type === typeFilter);
-
     if (sortKey === "title") {
       arr = [...arr].sort((a, b) => a.title.localeCompare(b.title));
     } else {
@@ -959,16 +958,13 @@ export default function Page() {
     note?: string;
   }) => {
     setErrorMsg(null);
-
     const contentLen = (draft.title?.trim().length || 0) + (draft.note?.trim().length || 0);
     if (contentLen < 3) {
       setErrorMsg("タイトル/メモが短すぎます（3文字以上にしてください）");
       return;
     }
-
     try {
       const ai = await requestAiTags(draft);
-
       await addDoc(collection(db, "items"), {
         title: draft.title,
         type: draft.type,
@@ -1000,13 +996,11 @@ export default function Page() {
     }
   ) => {
     setErrorMsg(null);
-
     const contentLen = (patch.title?.trim().length || 0) + (patch.note?.trim().length || 0);
     if (contentLen < 3) {
       setErrorMsg("タイトル/メモが短すぎます（3文字以上にしてください）");
       return;
     }
-
     try {
       let tagsToSave: string[] = (patch.tags ?? []).slice(0, 12);
       let aiSummary: string | null = null;
@@ -1026,7 +1020,6 @@ export default function Page() {
         aiConfidence = ai.confidence ?? null;
         aiModel = ai.model ?? null;
       }
-
       await updateDoc(doc(db, "items", id), {
         title: patch.title,
         type: patch.type,
@@ -1089,7 +1082,6 @@ export default function Page() {
               >
                 AI Tag Box
               </Typography>
-
               <TextField
                 inputRef={searchRef}
                 placeholder="検索 (タイトル・タグ・URL)"
@@ -1146,7 +1138,6 @@ export default function Page() {
                   }}
                 />
               )}
-
               <Box sx={{ justifySelf: "end" }} />
             </>
           )}
@@ -1168,7 +1159,6 @@ export default function Page() {
                 <MenuItem value="memo">メモ</MenuItem>
               </Select>
             </FormControl>
-
             <FormControl size="small" sx={{ minWidth: 140 }}>
               <InputLabel>並び替え</InputLabel>
               <Select
@@ -1180,7 +1170,6 @@ export default function Page() {
                 <MenuItem value="title">タイトル順</MenuItem>
               </Select>
             </FormControl>
-
             <Button
               variant="outlined"
               onClick={() => setAddOpen(true)}
@@ -1226,7 +1215,6 @@ export default function Page() {
               />
             </Box>
           ))}
-
           <Box>
             <PlusCard onClick={() => setAddOpen(true)}>
               <Stack alignItems="center" spacing={1}>
@@ -1241,7 +1229,6 @@ export default function Page() {
       </Container>
 
       <AddItemDialog open={addOpen} onClose={() => setAddOpen(false)} onSave={saveNewItem} />
-
       <ItemDetailDialog
         item={detailItem}
         open={!!detailItem}
@@ -1251,7 +1238,6 @@ export default function Page() {
           setEditItem(item);
         }}
       />
-
       <EditItemDialog
         item={editItem}
         open={!!editItem}
@@ -1261,4 +1247,3 @@ export default function Page() {
     </ThemeProvider>
   );
 }
-
