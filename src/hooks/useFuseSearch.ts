@@ -13,7 +13,7 @@ export function useFuseSearch<T>({
   items,
   search,
   keys,
-  threshold = 0.5,
+  threshold = 0.4,
   distance = 100,
 }: UseFuseSearchParams<T>): T[] {
   const fuse = useMemo(() => {

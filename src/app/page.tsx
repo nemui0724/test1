@@ -925,7 +925,7 @@ export default function Page() {
 
     const fuse = new Fuse(itemsForSearch, {
       keys: ["titleSearch", "usernameSearch", "noteSearch", "tagsSearch", "url"],
-      threshold: 0.5,
+      threshold: 0.4,
       distance: 100,
       ignoreLocation: true,
     });
